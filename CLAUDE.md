@@ -76,14 +76,19 @@ usage cheat sheet — update it when the public surface changes.
 ## Releasing
 
 1. Bump `version` in `package.json` **and** `VERSION` in `src/version.ts`, and
-   add a dated section to `CHANGELOG.md`.
-2. Update the customer-facing changelogs in `nimbioCore` — for a JS/SDK release,
-   `changelogs/` currently tracks the Python SDK under `python-sdk.md`; add an
-   npm/JS SDK changelog there when one is introduced.
-3. Tag `vX.Y.Z` and push the tag — `.github/workflows/publish.yml` runs
-   `npm run check`, builds, and publishes to npm via **Trusted Publishing**
-   (OIDC; no stored token) with provenance. An npm version cannot be re-uploaded,
-   so only tag when ready.
+   add a dated section to `CHANGELOG.md`. `npm run version:check` (part of
+   `npm run check`, so CI enforces it) asserts these three agree.
+2. Update the customer-facing changelogs in `nimbioCore`:
+   `changelogs/npm-sdk.md` and `marketing-changelogs/npm-sdk.md`.
+3. Tag `vX.Y.Z` and push the tag — `.github/workflows/publish.yml` verifies the
+   tag matches `package.json`, runs `npm run check`, builds, and publishes to npm
+   via **Trusted Publishing** (OIDC; no stored token) with provenance. An npm
+   version cannot be re-uploaded, so only tag when ready.
+
+**First publish is manual** (the Trusted Publisher can only be configured on an
+existing package): run `npm publish --access public --provenance=false` once
+(after `npm login` and creating/owning the `@nimbio` npm org), then configure the
+Trusted Publisher on npmjs.com. CI publishing takes over from the next tag.
 
 **One-time publish setup:** the `@nimbio` scope must exist/be owned on npm, and a
 Trusted Publisher (GitHub Actions, repo `nimbio-labs/nimbio-npm-community-api`,

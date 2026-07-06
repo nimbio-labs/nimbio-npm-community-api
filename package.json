@@ -52,7 +52,8 @@
     "coverage": "vitest run --coverage",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "check": "npm run lint && npm run typecheck && npm run coverage",
+    "version:check": "node scripts/check-version.mjs",
+    "check": "npm run version:check && npm run lint && npm run typecheck && npm run coverage",
     "prepublishOnly": "npm run build"
   },
   "devDependencies": {

@@ -37,6 +37,16 @@ jobs:
       - name: Upgrade npm (trusted publishing needs npm >= 11.5.1)
         run: npm install -g npm@latest
 
+      - name: Verify the pushed tag matches package.json version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG="$(node -p "require('./package.json').version")"
+          echo "tag=$GITHUB_REF_NAME (=> $TAG), package.json=$PKG"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $PKG" >&2
+            exit 1
+          fi
+
       - name: Install
         run: npm ci
 
