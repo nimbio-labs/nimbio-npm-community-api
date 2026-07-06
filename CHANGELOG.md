@@ -5,6 +5,17 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-07-06
+
+### Added
+- Release guards: a version-consistency check (`npm run version:check`, enforced
+  in CI) that keeps `package.json`, `src/version.ts`, and this changelog in sync,
+  and a publish-workflow gate that verifies the pushed tag matches `package.json`.
+
+### Changed
+- No changes to the published API surface. This release also validates the
+  automated npm Trusted Publishing (OIDC) pipeline end to end.
+
 ## [0.1.0] - 2026-07-06
 
 ### Added
@@ -26,5 +37,6 @@ adheres to [Semantic Versioning](https://semver.org/).
 - Async-iterator log pagination helpers (`iterAccessLog`, `iterGateStatusLog`).
 - Dual ESM + CommonJS builds, full Vitest suite (fully mocked, no network).
 
-[Unreleased]: https://github.com/nimbio-labs/nimbio-npm-community-api/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/nimbio-labs/nimbio-npm-community-api/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/nimbio-labs/nimbio-npm-community-api/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/nimbio-labs/nimbio-npm-community-api/releases/tag/v0.1.0

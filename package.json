@@ -1,6 +1,6 @@
 {
   "name": "@nimbio/community-api",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Official TypeScript/JavaScript client for the Nimbio community API (api.nimbio.com) — manage a Nimbio community programmatically from Node, the browser, Deno, Bun, or edge runtimes.",
   "keywords": [
     "nimbio",
