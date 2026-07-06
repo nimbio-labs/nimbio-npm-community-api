@@ -1,0 +1,50 @@
+name: Publish to npm
+
+# Publishes on a pushed version tag (e.g. v0.1.0) using npm Trusted Publishing
+# (OIDC) — no npm token stored in the repo, and npm provenance is attached
+# automatically.
+#
+# One-time setup (after the first release exists on npm):
+#   1. Publish v0.1.0 once manually (`npm publish`) so the package exists, OR
+#      let this workflow do the first publish with a temporary NODE_AUTH_TOKEN.
+#   2. On npmjs.com > @nimbio/community-api > Settings > Trusted Publisher, add
+#      GitHub Actions with:
+#        repository: nimbio-labs/nimbio-npm-community-api
+#        workflow:   publish.yml
+#        environment: (leave blank, or set "npm" and add it below)
+#   3. Ensure the @nimbio scope/org exists on npm and you can publish to it.
+# After that, tag `vX.Y.Z` and push the tag — this workflow does the rest.
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # required for OIDC trusted publishing + provenance
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Upgrade npm (trusted publishing needs npm >= 11.5.1)
+        run: npm install -g npm@latest
+
+      - name: Install
+        run: npm ci
+
+      - name: Verify (lint + types + coverage)
+        run: npm run check
+
+      - name: Build
+        run: npm run build
+
+      - name: Publish
+        run: npm publish
