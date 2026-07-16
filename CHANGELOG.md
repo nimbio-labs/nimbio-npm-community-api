@@ -37,6 +37,10 @@ adheres to [Semantic Versioning](https://semver.org/).
 - Async-iterator log pagination helpers (`iterAccessLog`, `iterGateStatusLog`).
 - Dual ESM + CommonJS builds, full Vitest suite (fully mocked, no network).
 
+<!-- 0.1.0 was the manual first publish (npm publish, pre-Trusted-Publishing);
+     no v0.1.0 git tag was ever created (verified locally 2026-07-16), so 0.1.0
+     links to the npm version page instead of a GitHub tag. Tags exist from
+     v0.1.1 onward. -->
 [Unreleased]: https://github.com/nimbio-labs/nimbio-npm-community-api/compare/v0.1.1...HEAD
-[0.1.1]: https://github.com/nimbio-labs/nimbio-npm-community-api/compare/v0.1.0...v0.1.1
-[0.1.0]: https://github.com/nimbio-labs/nimbio-npm-community-api/releases/tag/v0.1.0
+[0.1.1]: https://github.com/nimbio-labs/nimbio-npm-community-api/releases/tag/v0.1.1
+[0.1.0]: https://www.npmjs.com/package/@nimbio/community-api/v/0.1.0

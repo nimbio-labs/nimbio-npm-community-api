@@ -217,7 +217,7 @@ npm test            # vitest (fully mocked; no network)
 npm run coverage    # vitest with coverage thresholds
 npm run lint        # eslint
 npm run typecheck   # tsc --noEmit
-npm run check       # lint + typecheck + coverage (what CI runs)
+npm run check       # version:check + lint + typecheck + coverage (publish gate; ci.yml runs lint/typecheck/coverage/build as separate steps)
 ```
 
 Tests mock `fetch` entirely, so the suite never touches the network. The wire

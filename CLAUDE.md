@@ -67,8 +67,13 @@ npm test            # vitest run
 npm run coverage    # vitest with coverage thresholds (95% lines)
 npm run lint        # eslint
 npm run typecheck   # tsc --noEmit
-npm run check       # lint + typecheck + coverage (what CI runs)
+npm run check       # version:check + lint + typecheck + coverage
 ```
+
+Note: `npm run check` is not literally what CI runs. `ci.yml` runs lint,
+typecheck, coverage, and **build** as separate steps (Node 18/20/22) and does
+not run `version:check`; `publish.yml` is what runs `npm run check` (then
+build) before publishing a tag.
 
 Keep coverage at/near the configured thresholds. `AGENTS.md` is the LLM/agent
 usage cheat sheet — update it when the public surface changes.
@@ -77,7 +82,8 @@ usage cheat sheet — update it when the public surface changes.
 
 1. Bump `version` in `package.json` **and** `VERSION` in `src/version.ts`, and
    add a dated section to `CHANGELOG.md`. `npm run version:check` (part of
-   `npm run check`, so CI enforces it) asserts these three agree.
+   `npm run check`, which `publish.yml` runs — the `ci.yml` PR checks do not)
+   asserts these three agree.
 2. Update the customer-facing changelogs in `nimbioCore`:
    `changelogs/npm-sdk.md` and `marketing-changelogs/npm-sdk.md`.
 3. Tag `vX.Y.Z` and push the tag — `.github/workflows/publish.yml` verifies the
