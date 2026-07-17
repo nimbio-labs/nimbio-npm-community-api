@@ -85,7 +85,7 @@ usage cheat sheet — update it when the public surface changes.
    `npm run check`, which `publish.yml` runs — the `ci.yml` PR checks do not)
    asserts these three agree.
 2. Update the customer-facing changelogs in `nimbioCore`:
-   `changelogs/npm-sdk.md` and `marketing-changelogs/npm-sdk.md`.
+   `nimbioCore/changelogs/npm-sdk.md` and `nimbioCore/marketing-changelogs/npm-sdk.md`.
 3. Tag `vX.Y.Z` and push the tag — `.github/workflows/publish.yml` verifies the
    tag matches `package.json`, runs `npm run check`, builds, and publishes to npm
    via **Trusted Publishing** (OIDC; no stored token) with provenance. An npm
@@ -107,5 +107,5 @@ in `.github/workflows/publish.yml`.
   auth, scope model).
 - `nimbio-python-community-api` — the Python sibling; keep the two surfaces in
   lockstep when the API changes.
-- `nimbioCore/changelogs/` + `marketing-changelogs/` — customer-facing changelogs.
+- `nimbioCore/changelogs/` + `nimbioCore/marketing-changelogs/` — customer-facing changelogs.
 - `CHANGELOG.md` (this repo) — technical changelog for GitHub releases.
