@@ -44,6 +44,11 @@ export interface ApiKeyInfo {
   name: string | null;
   /** `"test"` | `"live"`. */
   mode: string | null;
+  /** `"account"` | `"community"`. */
+  type: string | null;
+  communityId: string | null;
+  /** Endpoint families this key can call (e.g. `"hold_opens"`, `"webhooks"`). */
+  capabilities: string[];
   lastUsedDatetime: string | null;
   minuteLimit: number | null;
   minuteCount: number | null;
@@ -59,11 +64,18 @@ export function parseApiKeyInfo(raw: unknown): ApiKeyInfo {
     prefix: str(d.prefix),
     name: str(d.name),
     mode: str(d.mode),
+    type: str(d.type),
+    communityId: str(d.community_id),
+    capabilities: arr(d.capabilities).filter(
+      (x): x is string => typeof x === "string",
+    ),
     lastUsedDatetime: str(d.last_used_datetime),
-    minuteLimit: num(d.minute_limit),
-    minuteCount: num(d.minute_count),
-    monthLimit: num(d.month_limit),
-    monthCount: num(d.month_count),
+    // Servers before the 2026-07 fix emitted only the legacy names
+    // (calls_this_minute, ...) — accept both.
+    minuteLimit: num(d.minute_limit) ?? num(d.rate_limit_per_minute),
+    minuteCount: num(d.minute_count) ?? num(d.calls_this_minute),
+    monthLimit: num(d.month_limit) ?? num(d.quota_per_month),
+    monthCount: num(d.month_count) ?? num(d.calls_this_month),
     raw: d,
   };
 }
@@ -101,13 +113,32 @@ export function parseHealth(raw: unknown): Health {
 // Gate status
 // --------------------------------------------------------------------------- //
 
-/** One latch and its latest sensed physical state. */
+/** One entry of a latch's configured status vocabulary. */
+export interface PossibleStatus {
+  status: string | null;
+  transient: boolean;
+  raw: RawPayload;
+}
+
+export function parsePossibleStatus(raw: unknown): PossibleStatus {
+  const d = asObject(raw);
+  return { status: str(d.status), transient: bool(d.transient), raw: d };
+}
+
+/**
+ * One latch and its latest sensed physical state.
+ *
+ * `possibleStatuses` is the latch's configured status vocabulary (empty when
+ * no sensing is configured) — use it to classify the latch (e.g. a
+ * Locked/Unlocked door vs an Open/Closed gate) instead of hardcoding labels.
+ */
 export interface Latch {
   latchId: string | null;
   latchName: string | null;
   status: string | null;
   offline: boolean;
   message: string | null;
+  possibleStatuses: PossibleStatus[];
   raw: RawPayload;
 }
 
@@ -119,6 +150,7 @@ export function parseLatch(raw: unknown): Latch {
     status: str(d.status),
     offline: bool(d.offline),
     message: str(d.latch_status_current_message),
+    possibleStatuses: arr(d.possible_statuses).map(parsePossibleStatus),
     raw: d,
   };
 }
@@ -440,4 +472,271 @@ export function parseGateStatusLogPage(raw: unknown): GateStatusLogPage {
     dateTo: str(d.to),
     raw: d,
   };
+}
+
+// --------------------------------------------------------------------------- //
+// Hold opens
+// --------------------------------------------------------------------------- //
+
+/**
+ * Hold-open state for one latch. `heldOpen` is the combined truth (manual OR
+ * an active one-time/recurring window); `manual` reflects only the manual
+ * toggle. `events` / `recurring` are the raw window objects from the server.
+ */
+export interface HoldOpenLatch {
+  latchId: string | null;
+  latchName: string | null;
+  heldOpen: boolean;
+  manual: boolean;
+  disabledUntil: string | null;
+  timezone: string | null;
+  events: unknown[];
+  recurring: unknown[];
+  raw: RawPayload;
+}
+
+export function parseHoldOpenLatch(raw: unknown): HoldOpenLatch {
+  const d = asObject(raw);
+  return {
+    latchId: str(d.latch_id),
+    latchName: str(d.latch_name),
+    heldOpen: bool(d.held_open),
+    manual: bool(d.manual),
+    disabledUntil: str(d.disabled_until),
+    timezone: str(d.timezone),
+    events: arr(d.events),
+    recurring: arr(d.recurring),
+    raw: d,
+  };
+}
+
+/** Result of `community.holdOpens()` — hold-open state per latch id. */
+export interface HoldOpens {
+  latches: Record<string, HoldOpenLatch>;
+  raw: RawPayload;
+}
+
+export function parseHoldOpens(raw: unknown): HoldOpens {
+  const d = asObject(raw);
+  const entries = asObject(d.hold_opens);
+  const latches: Record<string, HoldOpenLatch> = {};
+  for (const [key, value] of Object.entries(entries)) {
+    latches[key] = parseHoldOpenLatch(value);
+  }
+  return { latches, raw: d };
+}
+
+/** Result of `community.setHoldOpen()`. */
+export interface ManualHoldOpenResult {
+  result: string | null;
+  latchId: string | null;
+  manual: boolean | null;
+  heldOpen: boolean | null;
+  requestId: string | null;
+  /** True when a test-mode key validated the call without moving the gate. */
+  simulated: boolean;
+  raw: RawPayload;
+}
+
+export function parseManualHoldOpenResult(raw: unknown): ManualHoldOpenResult {
+  const d = asObject(raw);
+  return {
+    result: str(d.result),
+    latchId: str(d.latch_id),
+    manual: typeof d.manual === "boolean" ? d.manual : null,
+    heldOpen: typeof d.held_open === "boolean" ? d.held_open : null,
+    requestId: str(d.request_id),
+    simulated: d.result === "simulated",
+    raw: d,
+  };
+}
+
+/** Result of `community.addHoldOpenEvent()` — keep `eventId` to end early. */
+export interface HoldOpenEventAdded {
+  result: string | null;
+  eventId: string | null;
+  latchId: string | null;
+  requestId: string | null;
+  simulated: boolean;
+  raw: RawPayload;
+}
+
+export function parseHoldOpenEventAdded(raw: unknown): HoldOpenEventAdded {
+  const d = asObject(raw);
+  return {
+    result: str(d.result),
+    eventId: str(d.event_id),
+    latchId: str(d.latch_id),
+    requestId: str(d.request_id),
+    simulated: d.result === "simulated",
+    raw: d,
+  };
+}
+
+/**
+ * Result of `community.removeHoldOpenEvent()`. `removed` is false on an
+ * idempotent re-remove (the window was already gone).
+ */
+export interface HoldOpenEventRemoved {
+  result: string | null;
+  removed: boolean;
+  requestId: string | null;
+  simulated: boolean;
+  raw: RawPayload;
+}
+
+export function parseHoldOpenEventRemoved(raw: unknown): HoldOpenEventRemoved {
+  const d = asObject(raw);
+  return {
+    result: str(d.result),
+    removed: bool(d.removed),
+    requestId: str(d.request_id),
+    simulated: d.result === "simulated",
+    raw: d,
+  };
+}
+
+// --------------------------------------------------------------------------- //
+// Webhooks
+// --------------------------------------------------------------------------- //
+
+/**
+ * One outbound webhook registration. `secret` is populated ONLY on the
+ * create / rotate-secret responses — store it then; it is never returned again.
+ */
+export interface Webhook {
+  webhookId: string | null;
+  url: string | null;
+  events: string[];
+  description: string | null;
+  active: boolean | null;
+  disabled: boolean | null;
+  secret: string | null;
+  raw: RawPayload;
+}
+
+export function parseWebhook(raw: unknown): Webhook {
+  const d = asObject(raw);
+  return {
+    webhookId: str(d.webhook_id),
+    url: str(d.url),
+    events: arr(d.events).filter((x): x is string => typeof x === "string"),
+    description: str(d.description),
+    active: typeof d.active === "boolean" ? d.active : null,
+    disabled: typeof d.disabled === "boolean" ? d.disabled : null,
+    secret: str(d.secret),
+    raw: d,
+  };
+}
+
+export function parseWebhooks(raw: unknown): Webhook[] {
+  const d = asObject(raw);
+  return arr(d.webhooks).map(parseWebhook);
+}
+
+export function parseWebhookEventTypes(raw: unknown): string[] {
+  const d = asObject(raw);
+  return arr(d.events).filter((x): x is string => typeof x === "string");
+}
+
+/** Result of `community.createWebhook()` / `community.updateWebhook()`. */
+export interface WebhookWriteResult {
+  result: string | null;
+  webhook: Webhook | null;
+  requestId: string | null;
+  simulated: boolean;
+  raw: RawPayload;
+}
+
+export function parseWebhookWriteResult(raw: unknown): WebhookWriteResult {
+  const d = asObject(raw);
+  const wh = d.webhook;
+  return {
+    result: str(d.result),
+    webhook: wh && typeof wh === "object" ? parseWebhook(wh) : null,
+    requestId: str(d.request_id),
+    simulated: d.result === "simulated",
+    raw: d,
+  };
+}
+
+/** Result of `community.rotateWebhookSecret()` — the new secret, returned once. */
+export interface WebhookSecret {
+  result: string | null;
+  webhookId: string | null;
+  secret: string | null;
+  requestId: string | null;
+  simulated: boolean;
+  raw: RawPayload;
+}
+
+export function parseWebhookSecret(raw: unknown): WebhookSecret {
+  const d = asObject(raw);
+  return {
+    result: str(d.result),
+    webhookId: str(d.webhook_id),
+    secret: str(d.secret),
+    requestId: str(d.request_id),
+    simulated: d.result === "simulated",
+    raw: d,
+  };
+}
+
+// --------------------------------------------------------------------------- //
+// Account surface (account-scoped keys)
+// --------------------------------------------------------------------------- //
+
+/** One latch reachable through one of your account's keys. */
+export interface AccountLatch {
+  id: string | null;
+  name: string | null;
+  offline: boolean;
+  location: string | null;
+  heldOpen: boolean;
+  raw: RawPayload;
+}
+
+export function parseAccountLatch(raw: unknown): AccountLatch {
+  const d = asObject(raw);
+  return {
+    id: str(d.id),
+    name: str(d.name),
+    offline: bool(d.offline),
+    location: str(d.location),
+    heldOpen: bool(d.held_open),
+    raw: d,
+  };
+}
+
+/** One of your account's Nimbio keys, with its latches nested. */
+export interface AccountKey {
+  id: string | null;
+  name: string | null;
+  home: string | null;
+  disabled: boolean;
+  hidden: boolean;
+  pending: boolean;
+  parentName: string | null;
+  latches: AccountLatch[];
+  raw: RawPayload;
+}
+
+export function parseAccountKey(raw: unknown): AccountKey {
+  const d = asObject(raw);
+  return {
+    id: str(d.id),
+    name: str(d.name),
+    home: str(d.home),
+    disabled: bool(d.disabled),
+    hidden: bool(d.hidden),
+    pending: bool(d.pending),
+    parentName: str(d.parent_name),
+    latches: arr(d.latches).map(parseAccountLatch),
+    raw: d,
+  };
+}
+
+export function parseAccountKeys(raw: unknown): AccountKey[] {
+  const d = asObject(raw);
+  return arr(d.keys).map(parseAccountKey);
 }

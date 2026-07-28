@@ -5,6 +5,36 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Account surface for account-scoped (member) keys: `client.account.keys()`
+  (your keys with latches nested) and `client.account.open(keyId, latchId)` —
+  new `Account` namespace with `AccountKey` / `AccountLatch` models. Enables
+  member-key integrations (e.g. Home Assistant) without bespoke HTTP.
+- Hold-open control surface: `community.holdOpens()`,
+  `community.setHoldOpen(latchId, state)` (manual toggle),
+  `community.addHoldOpenEvent(latchId, {start, end})` (one-time timed window),
+  and `community.removeHoldOpenEvent(latchId, eventId)` — with typed
+  `HoldOpens` / `ManualHoldOpenResult` / `HoldOpenEventAdded` /
+  `HoldOpenEventRemoved` models.
+- Webhook self-management: `community.webhookEventTypes()`, `webhooks()`,
+  `createWebhook()`, `updateWebhook()`, `deleteWebhook()`,
+  `rotateWebhookSecret()`, and `testWebhook()`. The signing secret is returned
+  once on create/rotate (`WebhookWriteResult` / `WebhookSecret`).
+- Webhook delivery verification helpers (Web Crypto, all runtimes):
+  `computeSignature`, `verifySignature`, `constructEvent`, and
+  `WebhookSignatureError` — Stripe-style `sha256=<hex>` HMAC over
+  `"{timestamp}.{body}"` with a replay-tolerance window.
+- `me().key` now carries `type` (`"account"` | `"community"`),
+  `communityId`, and a `capabilities` array for feature discovery.
+- `Latch.possibleStatuses` — the latch's configured status vocabulary
+  (`{status, transient}` entries) from `community.gateStatus()`, for
+  classifying a latch without hardcoding label sets.
+
+### Notes
+- Gate-status, key-statuses, hold-opens reads and `/v1/me` no longer consume
+  the key's monthly quota server-side (per-minute limit still applies), so
+  polling integrations can re-sync freely.
+
 ## [0.1.1] - 2026-07-06
 
 ### Added

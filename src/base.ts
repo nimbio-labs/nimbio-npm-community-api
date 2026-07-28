@@ -256,6 +256,32 @@ export const endpoints = {
     return { method: "GET", path: "/v1/me", parse: models.parseMe };
   },
 
+  accountKeys(includeHidden = false): EndpointSpec<models.AccountKey[]> {
+    return {
+      method: "GET",
+      path: "/v1/account/keys",
+      params: includeHidden ? { include_hidden: "true" } : undefined,
+      parse: models.parseAccountKeys,
+    };
+  },
+
+  accountOpen(
+    keyId: string,
+    latchId: string,
+    note?: string | null,
+    idempotencyKey?: string | null,
+  ): EndpointSpec<models.OpenResult> {
+    const body: RawBody = {};
+    if (note != null) body.note = note;
+    if (idempotencyKey != null) body.idempotency_key = idempotencyKey;
+    return {
+      method: "POST",
+      path: `/v1/account/keys/${enc(keyId)}/latches/${enc(latchId)}/open`,
+      body,
+      parse: models.parseOpenResult,
+    };
+  },
+
   gateStatus(): EndpointSpec<models.GateStatus> {
     return {
       method: "GET",
@@ -390,6 +416,131 @@ export const endpoints = {
       path: "/v1/community/gate-status-log",
       params: { page },
       parse: models.parseGateStatusLogPage,
+    };
+  },
+
+  // -- hold opens ----------------------------------------------------- //
+
+  holdOpens(): EndpointSpec<models.HoldOpens> {
+    return {
+      method: "GET",
+      path: "/v1/community/hold-opens",
+      parse: models.parseHoldOpens,
+    };
+  },
+
+  setHoldOpen(
+    latchId: string,
+    state: boolean,
+  ): EndpointSpec<models.ManualHoldOpenResult> {
+    return {
+      method: "PUT",
+      path: `/v1/community/latches/${enc(latchId)}/hold-open`,
+      body: { state },
+      parse: models.parseManualHoldOpenResult,
+    };
+  },
+
+  addHoldOpenEvent(
+    latchId: string,
+    start: string,
+    end: string,
+  ): EndpointSpec<models.HoldOpenEventAdded> {
+    return {
+      method: "POST",
+      path: `/v1/community/latches/${enc(latchId)}/hold-open/events`,
+      body: { start, end },
+      parse: models.parseHoldOpenEventAdded,
+    };
+  },
+
+  removeHoldOpenEvent(
+    latchId: string,
+    eventId: string,
+  ): EndpointSpec<models.HoldOpenEventRemoved> {
+    return {
+      method: "DELETE",
+      path: `/v1/community/latches/${enc(latchId)}/hold-open/events/${enc(eventId)}`,
+      parse: models.parseHoldOpenEventRemoved,
+    };
+  },
+
+  // -- webhooks -------------------------------------------------------- //
+
+  webhookEventTypes(): EndpointSpec<string[]> {
+    return {
+      method: "GET",
+      path: "/v1/community/webhook-events",
+      parse: models.parseWebhookEventTypes,
+    };
+  },
+
+  webhooks(): EndpointSpec<models.Webhook[]> {
+    return {
+      method: "GET",
+      path: "/v1/community/webhooks",
+      parse: models.parseWebhooks,
+    };
+  },
+
+  createWebhook(
+    url: string,
+    events: readonly string[],
+    description?: string | null,
+  ): EndpointSpec<models.WebhookWriteResult> {
+    const body: RawBody = { url, events: [...events] };
+    if (description != null) body.description = description;
+    return {
+      method: "POST",
+      path: "/v1/community/webhooks",
+      body,
+      parse: models.parseWebhookWriteResult,
+    };
+  },
+
+  updateWebhook(
+    webhookId: string,
+    fields: {
+      url?: string;
+      events?: readonly string[];
+      active?: boolean;
+      description?: string;
+    },
+  ): EndpointSpec<models.WebhookWriteResult> {
+    const body: RawBody = {};
+    if (fields.url !== undefined) body.url = fields.url;
+    if (fields.events !== undefined) body.events = [...fields.events];
+    if (fields.active !== undefined) body.active = fields.active;
+    if (fields.description !== undefined) body.description = fields.description;
+    return {
+      method: "PATCH",
+      path: `/v1/community/webhooks/${enc(webhookId)}`,
+      body,
+      parse: models.parseWebhookWriteResult,
+    };
+  },
+
+  deleteWebhook(webhookId: string): EndpointSpec<models.WriteResult> {
+    return {
+      method: "DELETE",
+      path: `/v1/community/webhooks/${enc(webhookId)}`,
+      parse: models.parseWriteResult,
+    };
+  },
+
+  rotateWebhookSecret(webhookId: string): EndpointSpec<models.WebhookSecret> {
+    return {
+      method: "POST",
+      path: `/v1/community/webhooks/${enc(webhookId)}/rotate-secret`,
+      parse: models.parseWebhookSecret,
+    };
+  },
+
+  testWebhook(webhookId: string): EndpointSpec<models.WriteResult> {
+    return {
+      method: "POST",
+      path: `/v1/community/webhooks/${enc(webhookId)}/test`,
+      parse: models.parseWriteResult,
     };
   },
 };

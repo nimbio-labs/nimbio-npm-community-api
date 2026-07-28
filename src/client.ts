@@ -16,6 +16,7 @@ import {
 } from "./base.js";
 import * as errors from "./errors.js";
 import type {
+  AccountKey,
   AccessLogEntry,
   AccessLogPage,
   CommunityKey,
@@ -23,11 +24,18 @@ import type {
   GateStatusLogEntry,
   GateStatusLogPage,
   Health,
+  HoldOpenEventAdded,
+  HoldOpenEventRemoved,
+  HoldOpens,
   KeyStatuses,
+  ManualHoldOpenResult,
   Me,
   MemberAccessLogPage,
   Members,
   OpenResult,
+  Webhook,
+  WebhookSecret,
+  WebhookWriteResult,
   WriteResult,
 } from "./models.js";
 
@@ -76,12 +84,15 @@ function headersToObject(headers: Headers): Record<string, string> {
 export class NimbioClient extends BaseClient {
   /** Community-scoped operations (`client.community.*`). */
   readonly community: Community;
+  /** Account-scoped operations (`client.account.*`) — your own keys. */
+  readonly account: Account;
   private readonly fetchImpl: FetchLike;
 
   constructor(apiKey?: string, options: ClientOptions = {}) {
     super(apiKey, options);
     this.fetchImpl = resolveFetch(options.fetch);
     this.community = new Community(this);
+    this.account = new Account(this);
   }
 
   // -- core request loop --------------------------------------------------- //
@@ -175,6 +186,37 @@ export class NimbioClient extends BaseClient {
 }
 
 /**
+ * `client.account.*` — account-scoped operations (your own keys).
+ *
+ * Requires an account-scoped API key; community-scoped keys throw
+ * {@link PermissionDeniedError} (`not_account_key`).
+ */
+export class Account {
+  constructor(private readonly client: NimbioClient) {}
+
+  /** Every Nimbio key on your account, with its latches nested. */
+  keys(opts: { includeHidden?: boolean } = {}): Promise<AccountKey[]> {
+    return this.client.request(endpoints.accountKeys(opts.includeHidden ?? false));
+  }
+
+  /**
+   * Open one of your latches through one of your keys. Live keys fire the
+   * gate (synchronous — the Promise resolves once the box confirms); test
+   * keys simulate. Denials throw {@link PermissionDeniedError}; a
+   * non-confirming gate throws {@link GateNotOpenedError}.
+   */
+  open(
+    keyId: string,
+    latchId: string,
+    opts: { note?: string; idempotencyKey?: string } = {},
+  ): Promise<OpenResult> {
+    return this.client.request(
+      endpoints.accountOpen(keyId, latchId, opts.note, opts.idempotencyKey),
+    );
+  }
+}
+
+/**
  * `client.community.*` — community-scoped operations.
  *
  * Requires a community-scoped API key; account-scoped keys throw
@@ -255,6 +297,102 @@ export class Community {
     return this.client.request(
       endpoints.setKeysDisabled(accountCommunityId, keyIds, disabled),
     );
+  }
+
+  // -- hold opens ------------------------------------------------------------ //
+
+  /**
+   * Hold-open state per latch: the combined `heldOpen` truth, the `manual`
+   * toggle, one-time `events`, and `recurring` schedules. Requires the
+   * community's Hold Opens feature to be enabled.
+   */
+  holdOpens(): Promise<HoldOpens> {
+    return this.client.request(endpoints.holdOpens());
+  }
+
+  /**
+   * Turn the manual hold open on/off for a latch. `manual` reflects only this
+   * toggle; turning it off does not cancel an active scheduled window. Test
+   * keys simulate.
+   */
+  setHoldOpen(latchId: string, state: boolean): Promise<ManualHoldOpenResult> {
+    return this.client.request(endpoints.setHoldOpen(latchId, state));
+  }
+
+  /**
+   * Add a one-time hold-open window (`"YYYY-MM-DD HH:MM"`, latch-local time).
+   * Keep the returned `eventId` to end the window early.
+   */
+  addHoldOpenEvent(
+    latchId: string,
+    opts: { start: string; end: string },
+  ): Promise<HoldOpenEventAdded> {
+    return this.client.request(
+      endpoints.addHoldOpenEvent(latchId, opts.start, opts.end),
+    );
+  }
+
+  /** Remove a one-time hold-open window early. Idempotent. */
+  removeHoldOpenEvent(
+    latchId: string,
+    eventId: string,
+  ): Promise<HoldOpenEventRemoved> {
+    return this.client.request(endpoints.removeHoldOpenEvent(latchId, eventId));
+  }
+
+  // -- webhooks ---------------------------------------------------------------- //
+
+  /** The catalog of event types a webhook can subscribe to. */
+  webhookEventTypes(): Promise<string[]> {
+    return this.client.request(endpoints.webhookEventTypes());
+  }
+
+  /** All webhooks registered on the community (secrets never listed). */
+  webhooks(): Promise<Webhook[]> {
+    return this.client.request(endpoints.webhooks());
+  }
+
+  /**
+   * Register a webhook (public https only). The HMAC signing secret is on
+   * `.webhook.secret` of the result — returned ONCE, store it. Verify
+   * deliveries with the `webhooks` module helpers.
+   */
+  createWebhook(
+    url: string,
+    events: readonly string[],
+    opts: { description?: string } = {},
+  ): Promise<WebhookWriteResult> {
+    return this.client.request(
+      endpoints.createWebhook(url, events, opts.description),
+    );
+  }
+
+  /** Edit a webhook; `active: true` revives an auto-disabled one. */
+  updateWebhook(
+    webhookId: string,
+    fields: {
+      url?: string;
+      events?: readonly string[];
+      active?: boolean;
+      description?: string;
+    },
+  ): Promise<WebhookWriteResult> {
+    return this.client.request(endpoints.updateWebhook(webhookId, fields));
+  }
+
+  /** Delete a webhook and its subscriptions. */
+  deleteWebhook(webhookId: string): Promise<WriteResult> {
+    return this.client.request(endpoints.deleteWebhook(webhookId));
+  }
+
+  /** Mint a new signing secret (returned once); the old one stops working. */
+  rotateWebhookSecret(webhookId: string): Promise<WebhookSecret> {
+    return this.client.request(endpoints.rotateWebhookSecret(webhookId));
+  }
+
+  /** Queue a synthetic `ping` delivery to verify connectivity. */
+  testWebhook(webhookId: string): Promise<WriteResult> {
+    return this.client.request(endpoints.testWebhook(webhookId));
   }
 
   // -- logs ---------------------------------------------------------------- //

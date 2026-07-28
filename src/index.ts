@@ -27,7 +27,7 @@
  * a real (live) or simulated (test) action is determined by the API key itself.
  */
 
-export { NimbioClient, Community } from "./client.js";
+export { NimbioClient, Community, Account } from "./client.js";
 export type { MemberAccessLogWindow } from "./client.js";
 
 export type {
@@ -73,6 +73,7 @@ export type {
   Me,
   Health,
   Latch,
+  PossibleStatus,
   GateStatus,
   Member,
   Members,
@@ -85,4 +86,24 @@ export type {
   MemberAccessLogPage,
   GateStatusLogEntry,
   GateStatusLogPage,
+  AccountLatch,
+  AccountKey,
+  HoldOpenLatch,
+  HoldOpens,
+  ManualHoldOpenResult,
+  HoldOpenEventAdded,
+  HoldOpenEventRemoved,
+  Webhook,
+  WebhookWriteResult,
+  WebhookSecret,
 } from "./models.js";
+
+// Webhook delivery verification (HMAC)
+export {
+  DEFAULT_TOLERANCE_SECONDS,
+  WebhookSignatureError,
+  computeSignature,
+  verifySignature,
+  constructEvent,
+} from "./webhooks.js";
+export type { VerifyOptions, WebhookEvent } from "./webhooks.js";
