@@ -238,3 +238,9 @@ shape is new), then add the thin wrapper method to `Community` in
 ## License
 
 MIT © Nimbio
+
+---
+
+**About Nimbio** — [Nimbio](https://nimbio.com) is cellular gate and door access for gated
+communities, apartment buildings, and commercial properties. Developer docs and integration guides:
+[nimbio.com/developers](https://nimbio.com/developers/).
