@@ -47,6 +47,22 @@ export class WebhookSignatureError extends Error {
 
 const encoder = new TextEncoder();
 
+/**
+ * Web Crypto's `subtle`, resolved lazily: browsers/Deno/Bun/edge and Node 19+
+ * expose `globalThis.crypto`, but Node 18 (which this package supports) only
+ * ships it as `require("node:crypto").webcrypto`. The dynamic import runs only
+ * when the global is absent, so bundlers targeting browsers never follow it.
+ */
+async function getSubtle(): Promise<SubtleCrypto> {
+  const g = globalThis as { crypto?: { subtle?: SubtleCrypto } };
+  if (g.crypto?.subtle) return g.crypto.subtle;
+  const mod = (await import("node:crypto")) as {
+    webcrypto?: { subtle?: SubtleCrypto };
+  };
+  if (mod.webcrypto?.subtle) return mod.webcrypto.subtle;
+  throw new Error("No Web Crypto implementation available in this runtime");
+}
+
 function toBytes(body: Uint8Array | ArrayBuffer | string): Uint8Array {
   if (typeof body === "string") return encoder.encode(body);
   return body instanceof Uint8Array ? body : new Uint8Array(body);
@@ -75,7 +91,8 @@ export async function computeSignature(
   timestamp: string | number,
   body: Uint8Array | ArrayBuffer | string,
 ): Promise<string> {
-  const key = await crypto.subtle.importKey(
+  const subtle = await getSubtle();
+  const key = await subtle.importKey(
     "raw",
     encoder.encode(secret),
     { name: "HMAC", hash: "SHA-256" },
@@ -87,7 +104,7 @@ export async function computeSignature(
   const signed = new Uint8Array(prefix.length + payload.length);
   signed.set(prefix);
   signed.set(payload, prefix.length);
-  const digest = await crypto.subtle.sign("HMAC", key, signed);
+  const digest = await subtle.sign("HMAC", key, signed);
   return `sha256=${toHex(digest)}`;
 }
 

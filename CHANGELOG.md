@@ -5,6 +5,14 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-07-28
+
+### Fixed
+- Webhook signature verification now works on Node 18: Web Crypto is resolved
+  lazily (`globalThis.crypto` where present, `node:crypto`'s `webcrypto`
+  otherwise) instead of assuming a global `crypto`, which Node only exposes
+  from 19 on. Browsers/Deno/Bun/edge are unaffected.
+
 ## [0.2.0] - 2026-07-28
 
 ### Added
