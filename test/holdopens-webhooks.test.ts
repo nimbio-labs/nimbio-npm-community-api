@@ -245,3 +245,53 @@ describe("me() legacy usage names", () => {
     expect(me.key.monthLimit).toBe(1000);
   });
 });
+
+describe("webhook verifier edge branches", () => {
+  const secret = "whsec_test";
+
+  it("rejects missing/empty signature or timestamp", async () => {
+    expect(await verifySignature("{}", { signature: null, timestamp: "1", secret }))
+      .toBe(false);
+    expect(await verifySignature("{}", { signature: "", timestamp: "1", secret }))
+      .toBe(false);
+    expect(await verifySignature("{}", { signature: "sha256=x", timestamp: null, secret }))
+      .toBe(false);
+    expect(await verifySignature("{}", { signature: "sha256=x", timestamp: "", secret }))
+      .toBe(false);
+  });
+
+  it("rejects a non-numeric timestamp even with a valid MAC", async () => {
+    const sig = await computeSignature(secret, "abc", "{}");
+    expect(await verifySignature("{}", { signature: sig, timestamp: "abc", secret }))
+      .toBe(false);
+  });
+
+  it("accepts Uint8Array and ArrayBuffer bodies", async () => {
+    const bytes = new TextEncoder().encode('{"event":"ping"}');
+    const ts = Math.floor(Date.now() / 1000).toString();
+    const sig = await computeSignature(secret, ts, bytes);
+    expect(await verifySignature(bytes, { signature: sig, timestamp: ts, secret }))
+      .toBe(true);
+    const buf = bytes.buffer.slice(0);
+    expect(await verifySignature(buf, { signature: sig, timestamp: ts, secret }))
+      .toBe(true);
+    const ev = await constructEvent(bytes, { signature: sig, timestamp: ts, secret });
+    expect(ev.event).toBe("ping");
+    expect(ev.communityId).toBeNull();
+    expect(ev.occurredAt).toBeNull();
+  });
+
+  it("constructEvent rejects a JSON body that is not an object", async () => {
+    const body = "[1,2,3]";
+    const ts = Math.floor(Date.now() / 1000).toString();
+    const sig = await computeSignature(secret, ts, body);
+    await expect(constructEvent(body, { signature: sig, timestamp: ts, secret }))
+      .rejects.toBeInstanceOf(TypeError);
+  });
+
+  it("length-mismatched signature fails fast", async () => {
+    const ts = Math.floor(Date.now() / 1000).toString();
+    expect(await verifySignature("{}", { signature: "sha256=short", timestamp: ts, secret }))
+      .toBe(false);
+  });
+});
