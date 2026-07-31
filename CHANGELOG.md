@@ -3,7 +3,20 @@
 All notable changes to `@nimbio/community-api` are documented here. This project
 adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.3.0] - Unreleased
+
+### Added
+- Live event stream: `client.community.streamEvents()` — an async iterator
+  over Server-Sent Events from `GET /v1/events/stream`, carrying the exact
+  webhook event payloads (`sense_line.changed`, `hold_open.changed`,
+  `open.*`, `device.*`, `member.*`, `directory.call`) over an outbound
+  connection, so integrations behind NAT get live push without exposing an
+  endpoint. Automatic reconnect with exponential backoff resumes from the
+  last seen event id; a `{ kind: "reset" }` message is yielded when the
+  server cannot replay a gap (re-seed via the status reads). New
+  `StreamEvent` / `StreamReset` / `StreamMessage` types, an `events` filter,
+  `reconnect: false` single-connection mode, and `AbortSignal` support.
+  Mirrors the Python SDK's `stream_events()` (released together).
 
 ## [0.2.1] - 2026-07-28
 

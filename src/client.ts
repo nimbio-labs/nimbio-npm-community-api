@@ -15,6 +15,7 @@ import {
   type PreparedRequest,
 } from "./base.js";
 import * as errors from "./errors.js";
+import * as sse from "./sse.js";
 import type {
   AccountKey,
   AccessLogEntry,
@@ -33,6 +34,7 @@ import type {
   MemberAccessLogPage,
   Members,
   OpenResult,
+  StreamMessage,
   Webhook,
   WebhookSecret,
   WebhookWriteResult,
@@ -63,6 +65,29 @@ function headersToObject(headers: Headers): Record<string, string> {
     out[key.toLowerCase()] = value;
   });
   return out;
+}
+
+/**
+ * Read one chunk, failing if nothing (not even a heartbeat) arrives within
+ * the idle window — a silently dead connection must not hang the consumer.
+ */
+async function readWithIdleTimeout(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      reader.read(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new errors.APITimeoutError()),
+          sse.STREAM_READ_TIMEOUT_SECONDS * 1000,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 /**
@@ -156,6 +181,42 @@ export class NimbioClient extends BaseClient {
     } finally {
       if (timer) clearTimeout(timer);
     }
+  }
+
+  // -- live event stream plumbing ------------------------------------------ //
+
+  /**
+   * @internal Open the SSE stream request. No JSON handling and no overall
+   * timeout — the stream is long-lived; idle detection happens at read time.
+   */
+  async streamFetch(
+    path: string,
+    params: Record<string, string> | undefined,
+    signal?: AbortSignal,
+  ): Promise<Response> {
+    const prepared = this.prepare("GET", path, { params });
+    const url = prepared.params
+      ? `${prepared.url}?${new URLSearchParams(prepared.params).toString()}`
+      : prepared.url;
+    try {
+      return await this.fetchImpl(url, {
+        method: "GET",
+        headers: prepared.headers,
+        signal,
+      });
+    } catch (e) {
+      if (signal?.aborted) throw e;
+      const message = e instanceof Error && e.message ? e.message : "Connection error";
+      throw new errors.APIConnectionError(message, { cause: e });
+    }
+  }
+
+  /** @internal Throw the mapped APIError for a non-200 stream response. */
+  async throwStreamError(resp: Response): Promise<never> {
+    const bodyText = await resp.text();
+    this.parseResponse(resp.status, this.decode(bodyText), headersToObject(resp.headers));
+    // parseResponse always throws for non-2xx; this is unreachable.
+    throw new errors.APIConnectionError("Unexpected stream response");
   }
 
   // -- lifecycle ----------------------------------------------------------- //
@@ -393,6 +454,106 @@ export class Community {
   /** Queue a synthetic `ping` delivery to verify connectivity. */
   testWebhook(webhookId: string): Promise<WriteResult> {
     return this.client.request(endpoints.testWebhook(webhookId));
+  }
+
+  // -- live events ---------------------------------------------------------- //
+
+  /**
+   * Iterate the community's live events over SSE — the same payloads webhooks
+   * deliver, pushed over an outbound connection (works behind NAT, no public
+   * endpoint needed).
+   *
+   * Yields `{ kind: "event", id, type, data, payload }` per event, and
+   * `{ kind: "reset", reason }` when the server cannot replay a reconnect
+   * gap — re-seed via the status reads (`gateStatus()` / `holdOpens()`), then
+   * keep iterating.
+   *
+   * With `reconnect: true` (default) dropped connections re-open with
+   * exponential backoff, resuming from the last seen event id. HTTP errors
+   * (401, 403, 429 `stream_limit`, ...) always throw. Pass an `AbortSignal`
+   * to stop the stream (the generator returns cleanly). Connecting charges
+   * one per-minute request and is monthly-quota-exempt; delivered events are
+   * free.
+   */
+  async *streamEvents(
+    opts: {
+      events?: readonly string[];
+      lastEventId?: string;
+      reconnect?: boolean;
+      signal?: AbortSignal;
+    } = {},
+  ): AsyncGenerator<StreamMessage, void, undefined> {
+    const { events, lastEventId, reconnect = true, signal } = opts;
+    let cursor: string | null = lastEventId ?? null;
+    let attempt = 0;
+
+    for (;;) {
+      if (signal?.aborted) return;
+      let resp: Response;
+      try {
+        resp = await this.client.streamFetch(
+          sse.STREAM_PATH,
+          sse.streamParams(events, cursor),
+          signal,
+        );
+      } catch (e) {
+        if (signal?.aborted) return;
+        if (!reconnect) throw e;
+        await sleep(sse.backoffDelay(attempt));
+        attempt += 1;
+        continue;
+      }
+      if (resp.status !== 200) {
+        await this.client.throwStreamError(resp);
+      }
+
+      if (resp.body) {
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        const parser = new sse.SSEParser();
+        let buffer = "";
+        try {
+          for (;;) {
+            const { done, value } = await readWithIdleTimeout(reader);
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            let nl: number;
+            while ((nl = buffer.indexOf("\n")) >= 0) {
+              let line = buffer.slice(0, nl);
+              buffer = buffer.slice(nl + 1);
+              if (line.endsWith("\r")) line = line.slice(0, -1);
+              const frame = parser.feed(line);
+              if (!frame) continue;
+              const model = sse.frameToModel(frame);
+              if (!model) continue;
+              attempt = 0;
+              cursor = model.kind === "reset" ? null : model.id;
+              yield model;
+            }
+          }
+        } catch (e) {
+          if (signal?.aborted) return;
+          if (!reconnect) {
+            if (e instanceof errors.NimbioError) throw e;
+            const message =
+              e instanceof Error && e.message ? e.message : "Connection error";
+            throw new errors.APIConnectionError(message, { cause: e });
+          }
+        } finally {
+          try {
+            await reader.cancel();
+          } catch {
+            /* stream already closed */
+          }
+        }
+      }
+
+      // Stream ended (server close / deploy / slow-client drop) or a
+      // transport error with reconnect enabled: back off and resume.
+      if (signal?.aborted || !reconnect) return;
+      await sleep(sse.backoffDelay(attempt));
+      attempt += 1;
+    }
   }
 
   // -- logs ---------------------------------------------------------------- //

@@ -740,3 +740,36 @@ export function parseAccountKeys(raw: unknown): AccountKey[] {
   const d = asObject(raw);
   return arr(d.keys).map(parseAccountKey);
 }
+
+// --------------------------------------------------------------------------- //
+// Live event stream (SSE)
+// --------------------------------------------------------------------------- //
+
+/**
+ * One live event from `community.streamEvents()`.
+ *
+ * `data` is the exact JSON body a webhook receiver gets for the same event:
+ * `{ event, id, community_id, occurred_at, data: {...} }` — `payload` is a
+ * convenience view of the event-specific fields (`data.data`).
+ */
+export interface StreamEvent {
+  kind: "event";
+  id: string;
+  /** e.g. "sense_line.changed", "hold_open.changed" */
+  type: string;
+  data: Record<string, unknown>;
+  payload: Record<string, unknown>;
+}
+
+/**
+ * Yielded when the server cannot replay the requested cursor. The local
+ * picture may be stale: re-seed via the status reads
+ * (`gateStatus()` / `holdOpens()`), then keep iterating.
+ */
+export interface StreamReset {
+  kind: "reset";
+  reason: string | null;
+}
+
+/** Union yielded by `community.streamEvents()`. */
+export type StreamMessage = StreamEvent | StreamReset;

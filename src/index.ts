@@ -96,6 +96,9 @@ export type {
   Webhook,
   WebhookWriteResult,
   WebhookSecret,
+  StreamEvent,
+  StreamReset,
+  StreamMessage,
 } from "./models.js";
 
 // Webhook delivery verification (HMAC)

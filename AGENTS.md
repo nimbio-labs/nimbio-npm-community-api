@@ -62,7 +62,22 @@ await client.community.memberAccessLogs(ACCOUNT_COMMUNITY_ID, { window: "last_30
 await client.community.accessLog({ page: 0 });          // -> AccessLogPage (.logs, .hasMore)
 await client.community.gateStatusLog({ page: 0 });      // -> GateStatusLogPage
 for await (const row of client.community.iterAccessLog()) { /* auto-paginates */ }
+
+// Live events (SSE push — same payloads as webhooks, works behind NAT)
+for await (const msg of client.community.streamEvents({
+  events: ["sense_line.changed", "hold_open.changed"],  // filter optional
+  signal: controller.signal,                            // AbortSignal to stop
+})) {
+  if (msg.kind === "reset") { /* gap not replayable: re-seed via gateStatus()/holdOpens() */ }
+  else { msg.id; msg.type; msg.payload; }               // payload = event-specific fields
+}
 ```
+
+`streamEvents()` iterates forever by default (auto-reconnect with backoff,
+resuming from the last seen event id); pass `reconnect: false` to consume one
+connection and return. HTTP errors throw (`RateLimitError` with code
+`stream_limit` = too many concurrent streams; the cap is 3 per key).
+Connecting charges one per-minute request; delivered events are quota-free.
 
 ## ID vocabulary (important)
 
