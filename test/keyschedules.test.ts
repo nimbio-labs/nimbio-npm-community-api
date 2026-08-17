@@ -123,6 +123,18 @@ describe("key schedules", () => {
     expect(calls[0]!.body).toEqual({ windows: [] });
   });
 
+  it("passes the 24:00 end-of-day sentinel through unchanged", async () => {
+    const { client: c, calls } = client({ body: SCHEDULE });
+
+    await c.community.setKeySchedule("k1", [
+      { daysOfTheWeek: "MTWHF", startTime: "22:00", endTime: "24:00" },
+    ]);
+
+    expect(calls[0]!.body).toEqual({
+      windows: [{ days_of_the_week: "MTWHF", start_time: "22:00", end_time: "24:00" }],
+    });
+  });
+
   it("a test-mode write reports simulated", async () => {
     const { client: c } = client({
       body: {
