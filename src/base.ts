@@ -465,6 +465,43 @@ export const endpoints = {
     };
   },
 
+  // -- key access schedules -------------------------------------------- //
+
+  keySchedules(): EndpointSpec<models.KeySchedules> {
+    return {
+      method: "GET",
+      path: "/v1/community/key-schedules",
+      parse: models.parseKeySchedules,
+    };
+  },
+
+  keySchedule(keyId: string): EndpointSpec<models.KeySchedule> {
+    return {
+      method: "GET",
+      path: `/v1/community/keys/${enc(keyId)}/schedule`,
+      parse: models.parseKeySchedule,
+    };
+  },
+
+  setKeySchedule(
+    keyId: string,
+    windows: models.ScheduleWindowInput[] | null | undefined,
+  ): EndpointSpec<models.KeySchedule> {
+    // Whole-schedule replace: [] removes every restriction. Times default to
+    // null (all day) so a caller can pass days alone.
+    const payload = (windows ?? []).map((w) => ({
+      days_of_the_week: w.daysOfTheWeek,
+      start_time: w.startTime ?? null,
+      end_time: w.endTime ?? null,
+    }));
+    return {
+      method: "PUT",
+      path: `/v1/community/keys/${enc(keyId)}/schedule`,
+      body: { windows: payload },
+      parse: models.parseKeySchedule,
+    };
+  },
+
   // -- webhooks -------------------------------------------------------- //
 
   webhookEventTypes(): EndpointSpec<string[]> {

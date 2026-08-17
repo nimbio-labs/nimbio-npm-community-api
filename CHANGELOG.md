@@ -3,6 +3,26 @@
 All notable changes to `@nimbio/community-api` are documented here. This project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-08-17
+
+### Added
+- Key access schedules: `client.community.keySchedules()`,
+  `keySchedule(keyId)` and `setKeySchedule(keyId, windows)` — limit which days
+  and times a key may open its gates. `setKeySchedule` replaces the whole
+  schedule; `[]` removes the restriction entirely. New `KeySchedule`,
+  `KeySchedules`, `ScheduleWindow` and `ScheduleWindowInput` types.
+  `keySchedules().blocked` collects keys that are denied at **all** times
+  because a saved schedule is switched off — a fault worth surfacing, since
+  the windows in that state block rather than restrict. Reads are
+  quota-exempt. Mirrors the Python SDK's `key_schedules()` (released
+  together).
+
+  Two server rules the types cannot express, so they are documented instead:
+  a window cannot run past midnight (`22:00`–`06:00` is rejected with
+  `overnight_not_supported` — send two windows), and a schedule on the
+  community key cascades to every member key beneath it (check
+  `descendantKeyCount`).
+
 ## [0.3.0] - 2026-07-31
 
 ### Added

@@ -121,6 +121,15 @@ await client.community.grantKeys(ACCOUNT_COMMUNITY_ID, ["KEY_ID"]);           //
 await client.community.revokeKeys(ACCOUNT_COMMUNITY_ID, ["KEY_ID"], { removeMember: false }); // -> WriteResult
 await client.community.setKeysDisabled(ACCOUNT_COMMUNITY_ID, ["KEY_ID"], true);               // -> WriteResult
 
+// Access schedules — limit WHEN a key may open its gates
+await client.community.keySchedules();              // -> KeySchedules (.keys, .blocked)
+                                                    //    community key(s) + member keys that HAVE a schedule
+await client.community.keySchedule("KEY_ID");       // -> KeySchedule
+await client.community.setKeySchedule("KEY_ID", [   // replaces the WHOLE schedule
+  { daysOfTheWeek: "MTWHF", startTime: "06:00", endTime: "18:00" },
+]);
+await client.community.setKeySchedule("KEY_ID", []); // [] = always allowed
+
 // Logs (community must have Access Log History enabled)
 await client.community.memberAccessLogs(ACCOUNT_COMMUNITY_ID, { window: "last_30" }); // last_30 | 30_60 | 60_90
 await client.community.accessLog({ page: 0 });      // -> AccessLogPage   (.logs, .hasMore)
@@ -130,6 +139,28 @@ await client.community.gateStatusLog({ page: 0 });  // -> GateStatusLogPage
 for await (const row of client.community.iterAccessLog()) { /* … */ }
 for await (const row of client.community.iterGateStatusLog()) { /* … */ }
 ```
+
+### Access schedules
+
+`daysOfTheWeek` is a letter string from `MTWHFSU` — **`H` is Thursday**, `S` is
+Saturday, `U` is Sunday. Times are `"HH:MM"` in each gate's own local time.
+
+Four rules worth knowing before you write one:
+
+- **`setKeySchedule` replaces the entire schedule.** Send every window you want
+  to keep; `[]` removes the restriction so the key may open at any time.
+- **Windows cannot run past midnight.** `22:00`–`06:00` is rejected with
+  `overnight_not_supported`. Send two windows instead, one ending `23:59` and
+  one starting `00:00` on the following day.
+- **A schedule on the community key applies to every member key beneath it.**
+  Check `descendantKeyCount` and `isCommunityKey` before writing one.
+- **A schedule covers every gate the key opens** — there is no per-gate
+  override.
+
+`restricted` means the key is genuinely time-limited. `permanentlyBlocked`
+means it has windows saved but the restriction is switched off, which denies
+every open at every hour — a fault, not a working schedule. `keySchedules()`
+collects those under `.blocked`; saving a schedule repairs one.
 
 ### ID vocabulary
 

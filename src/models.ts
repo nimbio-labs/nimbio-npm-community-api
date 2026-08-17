@@ -773,3 +773,110 @@ export interface StreamReset {
 
 /** Union yielded by `community.streamEvents()`. */
 export type StreamMessage = StreamEvent | StreamReset;
+
+// --------------------------------------------------------------------------- //
+// Key access schedules
+// --------------------------------------------------------------------------- //
+
+/**
+ * One recurring window during which a key may open its gates.
+ *
+ * `daysOfTheWeek` is a letter string from `MTWHFSU` where **H is Thursday**,
+ * `S` is Saturday and `U` is Sunday. `startTime`/`endTime` are `'HH:MM'` in
+ * each gate's own local time; both null means all day on those days.
+ *
+ * A window cannot run past midnight — the server rejects `end <= start` with
+ * `overnight_not_supported`. Express overnight access as two windows.
+ */
+export interface ScheduleWindow {
+  daysOfTheWeek: string;
+  startTime: string | null;
+  endTime: string | null;
+  temporalDateId: string | null;
+  raw: RawPayload;
+}
+
+export function parseScheduleWindow(raw: unknown): ScheduleWindow {
+  const d = asObject(raw);
+  return {
+    daysOfTheWeek: str(d.days_of_the_week) ?? "",
+    startTime: str(d.start_time),
+    endTime: str(d.end_time),
+    temporalDateId: str(d.temporal_date_id),
+    raw: d,
+  };
+}
+
+/** A window as `setKeySchedule` accepts it. Identifiers are server-assigned. */
+export interface ScheduleWindowInput {
+  daysOfTheWeek: string;
+  startTime?: string | null;
+  endTime?: string | null;
+}
+
+/**
+ * A key's access schedule.
+ *
+ * `restricted` means the key is genuinely time-limited. `permanentlyBlocked`
+ * means it has windows saved but the restriction is switched off, which denies
+ * **every** open at every hour — a fault to repair, not a working schedule.
+ * Saving a schedule through this SDK clears that state.
+ *
+ * `descendantKeyCount` is the blast radius: a schedule on the community key
+ * applies to every member key beneath it.
+ */
+export interface KeySchedule {
+  keyId: string | null;
+  keyName: string | null;
+  restricted: boolean;
+  permanentlyBlocked: boolean;
+  isTemporalEnabled: boolean;
+  windows: ScheduleWindow[];
+  latchCount: number;
+  latches: unknown[];
+  isCommunityKey: boolean;
+  descendantKeyCount: number;
+  /** `"simulated"` for a test-mode write. */
+  result: string | null;
+  requestId: string | null;
+  raw: RawPayload;
+}
+
+export function parseKeySchedule(raw: unknown): KeySchedule {
+  const d = asObject(raw);
+  return {
+    keyId: str(d.key_id),
+    keyName: str(d.key_name),
+    restricted: bool(d.restricted),
+    permanentlyBlocked: bool(d.permanently_blocked),
+    isTemporalEnabled: bool(d.is_temporal_enabled),
+    windows: arr(d.windows).map(parseScheduleWindow),
+    latchCount: num(d.latch_count) ?? 0,
+    latches: arr(d.latches),
+    isCommunityKey: bool(d.is_community_key),
+    descendantKeyCount: num(d.descendant_key_count) ?? 0,
+    result: str(d.result),
+    requestId: str(d.request_id),
+    raw: d,
+  };
+}
+
+/** Result of `community.keySchedules()`. */
+export interface KeySchedules {
+  keys: KeySchedule[];
+  /** Keys denied at all times because a saved schedule is switched off. */
+  blocked: KeySchedule[];
+  requestId: string | null;
+  raw: RawPayload;
+}
+
+export function parseKeySchedules(raw: unknown): KeySchedules {
+  const d = asObject(raw);
+  const keys = arr(d.keys).map(parseKeySchedule);
+  return {
+    keys,
+    blocked: keys.filter((k) => k.permanentlyBlocked),
+    requestId: str(d.request_id),
+    raw: d,
+  };
+}

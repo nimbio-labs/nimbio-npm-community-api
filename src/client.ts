@@ -27,6 +27,9 @@ import type {
   Health,
   HoldOpenEventAdded,
   HoldOpenEventRemoved,
+  KeySchedule,
+  KeySchedules,
+  ScheduleWindowInput,
   HoldOpens,
   KeyStatuses,
   ManualHoldOpenResult,
@@ -399,6 +402,46 @@ export class Community {
     eventId: string,
   ): Promise<HoldOpenEventRemoved> {
     return this.client.request(endpoints.removeHoldOpenEvent(latchId, eventId));
+  }
+
+  // -- key access schedules ---------------------------------------------------- //
+
+  /**
+   * Access schedules for the community's keys.
+   *
+   * Returns the community's own key(s) plus every member key that currently
+   * **has** a schedule. Unrestricted member keys are omitted — a community can
+   * hold tens of thousands of them — so use {@link keySchedule} to read one by
+   * id.
+   *
+   * `blocked` lists keys denied at all times because a saved schedule is
+   * switched off. Does not consume the monthly quota.
+   */
+  keySchedules(): Promise<KeySchedules> {
+    return this.client.request(endpoints.keySchedules());
+  }
+
+  /** One key's access schedule. Does not consume the monthly quota. */
+  keySchedule(keyId: string): Promise<KeySchedule> {
+    return this.client.request(endpoints.keySchedule(keyId));
+  }
+
+  /**
+   * Replace a key's access schedule.
+   *
+   * `windows` is the COMPLETE schedule — pass `[]` to remove every
+   * restriction. Days are letters from `MTWHFSU` (**H is Thursday**, U is
+   * Sunday). Times are `"HH:MM"` in each gate's local time and cannot run past
+   * midnight, so send two windows for overnight access.
+   *
+   * A schedule on the community key applies to every member key beneath it —
+   * check `descendantKeyCount` first. Test keys simulate.
+   */
+  setKeySchedule(
+    keyId: string,
+    windows: ScheduleWindowInput[] | null | undefined,
+  ): Promise<KeySchedule> {
+    return this.client.request(endpoints.setKeySchedule(keyId, windows));
   }
 
   // -- webhooks ---------------------------------------------------------------- //
