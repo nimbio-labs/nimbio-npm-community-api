@@ -819,15 +819,26 @@ export interface ScheduleWindowInput {
 }
 
 /**
- * A key's access schedule.
+ * A community key's access schedule.
+ *
+ * Schedules are set on the community's own keys only. That schedule *is* the
+ * community-wide rule: it applies to every member key beneath it. An individual
+ * member's key cannot be read or scheduled through this API and is refused with
+ * `not_a_community_key` (403).
  *
  * `restricted` means the key is genuinely time-limited. `permanentlyBlocked`
  * means it has windows saved but the restriction is switched off, which denies
  * **every** open at every hour — a fault to repair, not a working schedule.
  * Saving a schedule through this SDK clears that state.
  *
- * `descendantKeyCount` is the blast radius: a schedule on the community key
- * applies to every member key beneath it.
+ * `descendantKeyCount` is the blast radius: how many **live** member keys
+ * inherit this restriction. Revoked and hidden keys are not counted — they are
+ * refused at the gate whatever the schedule says.
+ *
+ * `inactiveWindowCount` is how many windows the list endpoint filtered out
+ * because their date range no longer covers today; `windows` then holds only
+ * what is in force. It is 0 on a single-key read, which returns every window —
+ * expired ones included — because a write replaces the whole schedule.
  */
 export interface KeySchedule {
   keyId: string | null;
@@ -840,6 +851,7 @@ export interface KeySchedule {
   latches: unknown[];
   isCommunityKey: boolean;
   descendantKeyCount: number;
+  inactiveWindowCount: number;
   /** `"simulated"` for a test-mode write. */
   result: string | null;
   requestId: string | null;
@@ -859,16 +871,25 @@ export function parseKeySchedule(raw: unknown): KeySchedule {
     latches: arr(d.latches),
     isCommunityKey: bool(d.is_community_key),
     descendantKeyCount: num(d.descendant_key_count) ?? 0,
+    inactiveWindowCount: num(d.inactive_window_count) ?? 0,
     result: str(d.result),
     requestId: str(d.request_id),
     raw: d,
   };
 }
 
-/** Result of `community.keySchedules()`. */
+/**
+ * Result of `community.keySchedules()` — the community's own keys and their
+ * schedules. Community keys only; member keys are neither listed nor
+ * schedulable, since a restriction on the community key already cascades to
+ * every member beneath it.
+ */
 export interface KeySchedules {
   keys: KeySchedule[];
-  /** Keys denied at all times because a saved schedule is switched off. */
+  /**
+   * Community keys denied at all times because a saved schedule is switched
+   * off. Re-saving the schedule repairs one.
+   */
   blocked: KeySchedule[];
   requestId: string | null;
   raw: RawPayload;

@@ -405,14 +405,21 @@ export class Community {
   }
 
   // -- key access schedules ---------------------------------------------------- //
+  //
+  // Community keys only. A schedule on the community key is the community-wide
+  // rule and cascades to every member key beneath it; an individual member's
+  // key is refused with `not_a_community_key` (403).
 
   /**
-   * Access schedules for the community's keys.
+   * Access schedules for the community's own keys.
    *
-   * Returns the community's own key(s) plus every member key that currently
-   * **has** a schedule. Unrestricted member keys are omitted — a community can
-   * hold tens of thousands of them — so use {@link keySchedule} to read one by
-   * id.
+   * Community keys only — member keys are neither listed nor schedulable, since
+   * a restriction on the community key already applies to every member beneath
+   * it. {@link keySchedule} and {@link setKeySchedule} refuse a member's key
+   * with `not_a_community_key` (403).
+   *
+   * `windows` holds only what is in force today; anything whose date range has
+   * passed is counted in `inactiveWindowCount` instead.
    *
    * `blocked` lists keys denied at all times because a saved schedule is
    * switched off. Does not consume the monthly quota.
@@ -421,21 +428,30 @@ export class Community {
     return this.client.request(endpoints.keySchedules());
   }
 
-  /** One key's access schedule. Does not consume the monthly quota. */
+  /**
+   * One community key's access schedule.
+   *
+   * `keyId` must be one of the community's own keys; a member's key is refused
+   * with `not_a_community_key` (403). Returns **every** window, expired ones
+   * included, because {@link setKeySchedule} replaces the whole schedule. Does
+   * not consume the monthly quota.
+   */
   keySchedule(keyId: string): Promise<KeySchedule> {
     return this.client.request(endpoints.keySchedule(keyId));
   }
 
   /**
-   * Replace a key's access schedule.
+   * Replace a community key's access schedule.
    *
    * `windows` is the COMPLETE schedule — pass `[]` to remove every
    * restriction. Days are letters from `MTWHFSU` (**H is Thursday**, U is
    * Sunday). Times are `"HH:MM"` in each gate's local time and cannot run past
    * midnight, so send two windows for overnight access.
    *
-   * A schedule on the community key applies to every member key beneath it —
-   * check `descendantKeyCount` first. Test keys simulate.
+   * Community keys only: a member's own key is refused with
+   * `not_a_community_key` (403). The schedule applies to every member key
+   * beneath the community key, so check `descendantKeyCount` (live members
+   * only) first. Test keys simulate.
    */
   setKeySchedule(
     keyId: string,

@@ -121,14 +121,14 @@ await client.community.grantKeys(ACCOUNT_COMMUNITY_ID, ["KEY_ID"]);           //
 await client.community.revokeKeys(ACCOUNT_COMMUNITY_ID, ["KEY_ID"], { removeMember: false }); // -> WriteResult
 await client.community.setKeysDisabled(ACCOUNT_COMMUNITY_ID, ["KEY_ID"], true);               // -> WriteResult
 
-// Access schedules — limit WHEN a key may open its gates
+// Access schedules — limit WHEN the community's keys may open their gates
 await client.community.keySchedules();              // -> KeySchedules (.keys, .blocked)
-                                                    //    community key(s) + member keys that HAVE a schedule
-await client.community.keySchedule("KEY_ID");       // -> KeySchedule
-await client.community.setKeySchedule("KEY_ID", [   // replaces the WHOLE schedule
+                                                    //    the community's OWN key(s) only
+await client.community.keySchedule("COMMUNITY_KEY_ID");       // -> KeySchedule
+await client.community.setKeySchedule("COMMUNITY_KEY_ID", [   // replaces the WHOLE schedule
   { daysOfTheWeek: "MTWHF", startTime: "06:00", endTime: "18:00" },
 ]);
-await client.community.setKeySchedule("KEY_ID", []); // [] = always allowed
+await client.community.setKeySchedule("COMMUNITY_KEY_ID", []); // [] = always allowed
 
 // Logs (community must have Access Log History enabled)
 await client.community.memberAccessLogs(ACCOUNT_COMMUNITY_ID, { window: "last_30" }); // last_30 | 30_60 | 60_90
@@ -145,8 +145,12 @@ for await (const row of client.community.iterGateStatusLog()) { /* … */ }
 `daysOfTheWeek` is a letter string from `MTWHFSU` — **`H` is Thursday**, `S` is
 Saturday, `U` is Sunday. Times are `"HH:MM"` in each gate's own local time.
 
-Four rules worth knowing before you write one:
+Five rules worth knowing before you write one:
 
+- **Community keys only.** These endpoints take one of the community's own keys.
+  An individual member's key — even a member of this same community — is refused
+  with `not_a_community_key` (403). A member's own schedule is not a community
+  manager's to read or rewrite; the community-wide rule is what this API sets.
 - **`setKeySchedule` replaces the entire schedule.** Send every window you want
   to keep; `[]` removes the restriction so the key may open at any time.
 - **Windows cannot run past midnight.** `22:00`–`06:00` is rejected with
@@ -155,7 +159,8 @@ Four rules worth knowing before you write one:
   `"24:00"` (the end-of-day sentinel), not `"23:59"`, or the two halves leave a
   one-minute gap every night.
 - **A schedule on the community key applies to every member key beneath it.**
-  Check `descendantKeyCount` and `isCommunityKey` before writing one.
+  Check `descendantKeyCount` before writing one — it counts **live** member keys
+  only, since a revoked key is refused at the gate whatever the schedule says.
 - **A schedule covers every gate the key opens** — there is no per-gate
   override.
 
@@ -163,6 +168,11 @@ Four rules worth knowing before you write one:
 means it has windows saved but the restriction is switched off, which denies
 every open at every hour — a fault, not a working schedule. `keySchedules()`
 collects those under `.blocked`; saving a schedule repairs one.
+
+`keySchedules()` lists only the windows **in force today**; any whose date range
+has passed are counted in `inactiveWindowCount` instead, so an expired schedule
+never reads as "no restriction". `keySchedule(keyId)` returns every window,
+expired ones included, because a write replaces the whole schedule.
 
 ### ID vocabulary
 

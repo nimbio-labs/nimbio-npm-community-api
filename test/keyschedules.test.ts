@@ -30,6 +30,7 @@ const SCHEDULE = {
   latches: [{ latch_id: "l1", name: "Main Gate" }],
   is_community_key: true,
   descendant_key_count: 42,
+  inactive_window_count: 0,
   request_id: "r1",
 };
 
@@ -176,5 +177,47 @@ describe("key schedules", () => {
     const result = await c.community.keySchedules();
     expect(result.keys).toEqual([]);
     expect(result.blocked).toEqual([]);
+  });
+
+  it("surfaces expired windows as a count rather than dropping them silently", async () => {
+    // The list returns only what is in force today. A caller seeing an empty
+    // `windows` with no other signal would read an expired schedule as "no
+    // restriction", so the count has to survive parsing.
+    const expired = {
+      ...SCHEDULE,
+      windows: [],
+      restricted: false,
+      inactive_window_count: 2,
+    };
+    const { client: c } = client({ body: { keys: [expired], request_id: "r1" } });
+
+    const rows = (await c.community.keySchedules()).keys;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.windows).toEqual([]);
+    expect(rows[0]!.inactiveWindowCount).toBe(2);
+  });
+
+  it("refuses a member key with not_a_community_key rather than a generic 403", async () => {
+    // Schedules are community-keys-only. The two 403s need different fixes --
+    // "schedule the community key instead" versus "that key is someone else's"
+    // -- so the specific code must reach the caller.
+    const { client: c } = client({
+      status: 403,
+      body: {
+        error: {
+          code: "not_a_community_key",
+          message:
+            "Access schedules are set on the community key, which applies to " +
+            "every member beneath it.",
+          request_id: "r1",
+        },
+      },
+    });
+
+    await expect(
+      c.community.setKeySchedule("member1", [
+        { daysOfTheWeek: "MTWHF", startTime: "06:00", endTime: "18:00" },
+      ]),
+    ).rejects.toMatchObject({ code: "not_a_community_key" });
   });
 });
