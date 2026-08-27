@@ -1,6 +1,6 @@
 {
   "name": "@nimbio/community-api",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Official TypeScript/JavaScript client for the Nimbio community API (api.nimbio.com) — manage a Nimbio community programmatically from Node, the browser, Deno, Bun, or edge runtimes.",
   "keywords": [
     "nimbio",
@@ -50,6 +50,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
+    "surface": "UPDATE_SURFACE=1 vitest run test/surface.test.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "version:check": "node scripts/check-version.mjs",

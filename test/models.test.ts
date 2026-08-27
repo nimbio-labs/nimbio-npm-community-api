@@ -14,6 +14,10 @@ import {
   parseAccessLogPage,
   parseMemberAccessLogPage,
   parseGateStatusLogPage,
+  parseCommunityMap,
+  parseGeofenceWriteResult,
+  parseSenseLineDetail,
+  parseNfcTagWriteResult,
 } from "../src/models.js";
 
 describe("model parsers", () => {
@@ -146,5 +150,52 @@ describe("model parsers", () => {
     });
     expect(gpage.logs[0]!.senseLine).toBe(2);
     expect(gpage.hasMore).toBe(false);
+  });
+
+  it("tolerates a map with no locations configured anywhere", () => {
+    // A community that has never had pins placed still has to parse: null
+    // coordinates are the "not configured yet" answer, not a malformed one.
+    const map = parseCommunityMap({
+      boxes: [{ box_id: "b1", box_name: "Front Entry", latches: [{ latch_id: "l1" }] }],
+      geofence_modes: ["prompt", "auto_open", "future_mode"],
+    });
+    expect(map.communityLocation).toBeNull();
+    expect(map.boxes[0]!.location).toBeNull();
+    expect(map.boxes[0]!.latches[0]!.boxLocation).toBeNull();
+    expect(map.boxes[0]!.latches[0]!.geofence).toBeNull();
+    // An unknown mode from a newer server is kept, not filtered out.
+    expect(map.geofenceModes).toContain("future_mode");
+  });
+
+  it("keeps a geofence write readable when the server sends neither shape", () => {
+    const empty = parseGeofenceWriteResult({ result: "ok" });
+    expect(empty.latch).toBeNull();
+    expect(empty.latchId).toBeNull();
+    expect(empty.geofence).toBeNull();
+    expect(empty.minRadiusMeters).toBeNull();
+    expect(empty.wouldSet).toBeNull();
+    expect(empty.simulated).toBe(false);
+  });
+
+  it("reads a sense line flagged simulated without a simulated result", () => {
+    // Both shapes appear: the envelope's `result` and an inline `simulated`
+    // flag. Either one means no real hardware was touched.
+    const detail = parseSenseLineDetail({
+      result: "ok",
+      simulated: true,
+      sense_line_id: 1,
+      box_id: "b1",
+    });
+    expect(detail.simulated).toBe(true);
+    expect(detail.lastRecord).toBeNull();
+    expect(detail.statusMap).toEqual([]);
+    expect(detail.wouldSet).toBeNull();
+  });
+
+  it("reads an NFC write that carried neither a tag nor a would_change", () => {
+    const result = parseNfcTagWriteResult({ result: "ok" });
+    expect(result.tag).toBeNull();
+    expect(result.wouldChange).toBeNull();
+    expect(result.simulated).toBe(false);
   });
 });

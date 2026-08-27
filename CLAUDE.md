@@ -38,6 +38,10 @@ surface and behavior.
   builder returns an `EndpointSpec` `{ method, path, params, body, parse }`.
 - `src/client.ts` — `NimbioClient` (the `fetch` loop + top-level `me`/`health`)
   and `Community` (the `client.community.*` methods + async-iterator pagination).
+- `src/cache.ts` — `EtagCache`, the bounded LRU behind conditional GETs
+  (`If-None-Match` → 304). Opportunistic: it stores whatever carries an `ETag`
+  and ships no route list. Wired in via `BaseClient.beginConditional` /
+  `resolveNotModified` / `finishConditional`.
 - `src/models.ts` — tolerant response interfaces + `parse*` functions; every
   parsed object keeps the full payload on `.raw`.
 - `src/errors.ts` — `NimbioError` hierarchy mapping the

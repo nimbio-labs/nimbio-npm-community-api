@@ -102,6 +102,23 @@ export class PermissionDeniedError extends APIError {}
 export class NotFoundError extends APIError {}
 
 /**
+ * 409 — the request conflicts with the current state of the resource.
+ *
+ * Usually recoverable: this API uses 409 for an actionable state the caller is
+ * meant to catch and respond to, not for a generic failure. The codes you will
+ * actually see:
+ *
+ * - `delivery_in_flight` — a webhook replay was refused because Nimbio is
+ *   still retrying that delivery itself. Let its backoff finish, then retry.
+ * - `webhook_disabled` — the webhook is inactive or was auto-disabled after
+ *   repeated failures. Re-enable it yourself with
+ *   `community.updateWebhook(webhookId, { active: true })`, then retry.
+ * - `requires_confirmation` — a warning, not a veto: the same call succeeds
+ *   when repeated with `confirm: true`.
+ */
+export class ConflictError extends APIError {}
+
+/**
  * 429 — per-minute or monthly quota exceeded.
  *
  * `retryAfter` is the number of seconds the server asked you to wait (from the
@@ -138,6 +155,7 @@ export function exceptionFor(
   if (status === 401) return AuthenticationError;
   if (status === 403) return PermissionDeniedError;
   if (status === 404) return NotFoundError;
+  if (status === 409) return ConflictError;
   if (status === 429) return RateLimitError;
   if (status === 502 || status === 503) return UpstreamError;
   if (status >= 500) return ServerError;

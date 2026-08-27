@@ -3,6 +3,61 @@
 All notable changes to `@nimbio/community-api` are documented here. This project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] - 2026-08-27
+
+Full parity with the public REST API. The client now wraps **all 93 documented
+API operations**, up from 32 at 0.5.0.
+
+### Added
+
+- **61 endpoints**, closing every gap against `nimbio-public-api` 0.11.0:
+  - *Webhook deliveries* — `webhookDeliveries()`, `replayDelivery()`,
+    `retryFailedDeliveries()`.
+  - *Recurring hold opens* — `addHoldOpenRecurring()`,
+    `updateHoldOpenRecurring()`, `removeHoldOpenRecurring()`,
+    `setHoldOpenDisabledUntil()`.
+  - *Community & roster* — `info()`, `membersPage()`, `member()`, `messages()`,
+    `approveMember()`, `updateKey()`, `bulkAddMembers()`, `bulkGrantKeys()`,
+    `bulkRevokeKeys()`, `bulkSetKeysDisabled()`.
+  - *Settings, homes & notifications* — `settings()`, `updateSettings()`,
+    `homes()`, `home()`, `addHome()`, `updateHome()`, `removeHome()`,
+    `setMoveOutDate()`, `myNotificationSettings()`,
+    `setMyNotificationsEnabled()`, `addQuietHours()`, `removeQuietHours()`.
+  - *Guest access* — guest links, directory access codes, GuestView Entry and
+    short codes (20 methods).
+  - *Diagnostics, geography & audit* — NFC tags, sense lines, the community map
+    and geofences, change logs and key usage (12 methods).
+- **Transparent conditional requests, on by default.** The client stores the
+  `ETag` from any GET that carries one and revalidates with `If-None-Match`. A
+  `304` refunds the **monthly** quota, so polling integrations stop paying for
+  unchanged data. Bounded LRU (256, `cacheSize`), disable with `cache: false`,
+  inspect with `cacheStats`. The cache never answers on its own — every read
+  still asks the server — so it cannot serve stale data and needs no
+  write-invalidation.
+- **`ConflictError`** for HTTP 409, which this API uses for actionable states
+  (`delivery_in_flight`, `webhook_disabled`, `requires_confirmation`) rather
+  than generic failure.
+- **Exported constants** — `CAPABILITIES`, `ACCOUNT_KEY_CAPABILITIES`,
+  `STREAM_EVENT_TYPES`, `GUEST_LINK_TYPES`, `GUEST_LINK_STATES`,
+  `GEOFENCE_MODES`, `CHANGE_LOG_TYPES`, `KEY_USAGE_REPORT_TYPES`, and
+  `hasCapability()`. Convenience snapshots, not closed sets — an unrecognised
+  value is still accepted.
+- `surface.json` + a test that regenerates it from the `endpoints` registry, so
+  the client's HTTP surface is machine-readable and cannot silently go stale.
+  Consumed by `nimbioCore`'s `./nimbio.sh sdk-parity`.
+
+### Notes
+
+- Guest-link responses carry `token` and a working `url` — **from the list call
+  as well as create**. Treat them as secret material and do not log them.
+- `setGuestViewEntryLatches()` replaces the whole set; omitted latches lose
+  eligibility and their schedule windows.
+- `removeHome()` detaches every resident, irreversibly.
+- Quiet-hours windows **may** wrap past midnight and reject `"24:00"` — the
+  opposite of recurring hold opens and key schedules.
+- `boxId` is required when addressing a single sense line, despite the OpenAPI
+  schema marking it optional.
+
 ## [0.5.0] - 2026-08-26
 
 ### Changed

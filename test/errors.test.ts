@@ -6,6 +6,7 @@ import {
   AuthenticationError,
   PermissionDeniedError,
   NotFoundError,
+  ConflictError,
   RateLimitError,
   GateNotOpenedError,
   UpstreamError,
@@ -19,12 +20,23 @@ describe("exceptionFor mapping", () => {
     expect(exceptionFor(401)).toBe(AuthenticationError);
     expect(exceptionFor(403)).toBe(PermissionDeniedError);
     expect(exceptionFor(404)).toBe(NotFoundError);
+    expect(exceptionFor(409)).toBe(ConflictError);
     expect(exceptionFor(429)).toBe(RateLimitError);
     expect(exceptionFor(502)).toBe(UpstreamError);
     expect(exceptionFor(503)).toBe(UpstreamError);
     expect(exceptionFor(504)).toBe(GateNotOpenedError);
     expect(exceptionFor(500)).toBe(ServerError);
     expect(exceptionFor(418)).toBe(APIError);
+  });
+
+  it("keeps ConflictError in the APIError hierarchy", () => {
+    const e = new ConflictError("still retrying", {
+      status: 409, code: "delivery_in_flight",
+    });
+    expect(e).toBeInstanceOf(APIError);
+    expect(e).toBeInstanceOf(NimbioError);
+    expect(e.name).toBe("ConflictError");
+    expect(e.code).toBe("delivery_in_flight");
   });
 
   it("maps the did_not_open code to GateNotOpenedError regardless of status", () => {

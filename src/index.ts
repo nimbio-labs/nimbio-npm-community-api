@@ -28,7 +28,7 @@
  */
 
 export { NimbioClient, Community, Account } from "./client.js";
-export type { MemberAccessLogWindow } from "./client.js";
+export type { MemberAccessLogWindow, MemberBucket } from "./client.js";
 
 export type {
   ClientOptions,
@@ -38,6 +38,10 @@ export type {
 } from "./base.js";
 export { endpoints } from "./base.js";
 
+// Conditional requests (ETag / If-None-Match) — on by default
+export { DEFAULT_CACHE_SIZE } from "./cache.js";
+export type { CacheStats } from "./cache.js";
+
 export {
   ENVIRONMENTS,
   DEFAULT_ENVIRONMENT,
@@ -46,6 +50,28 @@ export {
 export type { Environment } from "./environments.js";
 
 export { VERSION } from "./version.js";
+
+// Known vocabularies (open-ended: unknown values are never rejected)
+export {
+  CAPABILITIES,
+  ACCOUNT_KEY_CAPABILITIES,
+  STREAM_EVENT_TYPES,
+  GUEST_LINK_TYPES,
+  GUEST_LINK_STATES,
+  GEOFENCE_MODES,
+  CHANGE_LOG_TYPES,
+  KEY_USAGE_REPORT_TYPES,
+  hasCapability,
+} from "./constants.js";
+export type {
+  Capability,
+  StreamEventType,
+  GuestLinkType,
+  GuestLinkState,
+  GeofenceMode,
+  ChangeLogType,
+  KeyUsageReportType,
+} from "./constants.js";
 
 // Error hierarchy
 export {
@@ -58,6 +84,7 @@ export {
   AuthenticationError,
   PermissionDeniedError,
   NotFoundError,
+  ConflictError,
   RateLimitError,
   GateNotOpenedError,
   UpstreamError,
@@ -103,6 +130,88 @@ export type {
   StreamEvent,
   StreamReset,
   StreamMessage,
+  CommunityFeatures,
+  CommunityCounts,
+  CommunityLatch,
+  CommunityInfo,
+  MemberKey,
+  MemberDetail,
+  MembersPage,
+  CommunityMessage,
+  MessagePage,
+  KeyUpdateResult,
+  BulkAddItem,
+  BulkKeyItem,
+  BulkItemResult,
+  BulkResult,
+  RecurringSchedule,
+  RecurringHoldOpenResult,
+  RecurringHoldOpenRemoved,
+  HoldOpenDisabledUntil,
+  WebhookDelivery,
+  DeliveryReplay,
+  DeliveryReplayResult,
+  RetryFailedResult,
+  TerminologyLabels,
+  TerminologyOption,
+  Terminology,
+  TerminologyOptions,
+  CommunitySettingsValues,
+  CommunitySettingsReadOnly,
+  CommunitySettings,
+  CommunitySettingsInput,
+  HomeMember,
+  Home,
+  HomeWriteResult,
+  HomeRemoved,
+  MoveOutDateResult,
+  QuietHoursWindow,
+  NotificationSettings,
+  GuestLatch,
+  GuestLink,
+  GuestLinkResult,
+  GuestLinkLogEntry,
+  GuestLinkLogPage,
+  GuestLinkLatchExclusions,
+  AccessCode,
+  AccessCodes,
+  NewAccessCode,
+  AccessCodeCreateResult,
+  AccessCodeWriteResult,
+  AccessCodeEligibleLatches,
+  AccessCodeLogEntry,
+  AccessCodeLogPage,
+  AccessCodeTemporalInput,
+  GuestViewEntry,
+  GuestViewEntryScheduleWindow,
+  GuestViewEntryLogEntry,
+  GuestViewEntryLogPage,
+  ShortCode,
+  ShortCodeResult,
+  NfcTag,
+  NfcTagPage,
+  NfcTagWriteResult,
+  NfcScanLogEntry,
+  NfcScanLogPage,
+  SenseLineLatch,
+  SenseLineBox,
+  SenseLine,
+  SenseLines,
+  SenseLineStatusMapEntry,
+  SenseLineLastRecord,
+  SenseLineDetail,
+  SenseLineRecord,
+  SenseLineRecordPage,
+  GeoPoint,
+  Geofence,
+  MapLatch,
+  MapBox,
+  CommunityMap,
+  GeofenceWriteResult,
+  ChangeLogEntry,
+  ChangeLogPage,
+  KeyUsageEntry,
+  KeyUsageReport,
 } from "./models.js";
 
 // Webhook delivery verification (HMAC)
