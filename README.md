@@ -263,7 +263,7 @@ await client.community.updateAccessCode(DIRECTORY_ACCESS_CODE_ID, { disabled: tr
 await client.community.deleteAccessCode(DIRECTORY_ACCESS_CODE_ID);
 await client.community.accessCodeEligibleLatches(); // CM-set allowlist (read-only here)
 await client.community.accessCodeLogs({ limit: 50 });
-await client.community.accessCodeMode();            // -> AccessCodeModeStatus (.mode, .flipPreview)
+await client.community.accessCodeMode();            // -> AccessCodeModeStatus (.mode, .flipPreview); works while codes are off
 await client.community.setAccessCodeMode("single_entry", { confirm: true }); // DELETES EVERY CODE
 
 // GuestView Entry — master switch, eligible gates, recurring windows (latch-local)

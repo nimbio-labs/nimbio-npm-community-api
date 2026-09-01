@@ -257,15 +257,36 @@ describe("access codes", () => {
     expect(row.codeMasked).toBe("******");
   });
 
+  it("accessCodes() reports the mode the community runs beside the rows", async () => {
+    // The list carries the mode so a caller rendering codes knows whether to
+    // show `codeMasked` or `entryCodeMasked` without a second round trip.
+    const { client: c } = client({
+      body: {
+        result: "ok",
+        feature_enabled: true,
+        access_code_mode: "single_entry",
+        access_codes: [],
+      },
+    });
+
+    const list = await c.community.accessCodes();
+
+    expect(list.accessCodeMode).toBe("single_entry");
+    expect(list.featureEnabled).toBe(true);
+  });
+
   it("in per_member mode the preamble fields are null, not missing", async () => {
     const { client: c } = client({
       body: { result: "ok", feature_enabled: true, access_codes: [CODE_ROW] },
     });
 
-    const row = (await c.community.accessCodes()).accessCodes[0]!;
+    const list = await c.community.accessCodes();
+    const row = list.accessCodes[0]!;
 
     expect(row.preamble).toBeNull();
     expect(row.entryCodeMasked).toBeNull();
+    // An older server that does not send the mode parses as null, not "".
+    expect(list.accessCodeMode).toBeNull();
   });
 
   it("createAccessCode() returns the full entry code once in single_entry mode", async () => {

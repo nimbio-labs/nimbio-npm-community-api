@@ -1402,7 +1402,12 @@ export class Community {
    * preamble (zero when switching back to `per_member`). Read this before you
    * flip, so you can show the cost to a human first.
    *
-   * The mode is also on `settings().readOnly.accessCodeMode`.
+   * The mode is also on `settings().readOnly.accessCodeMode` and on
+   * `accessCodes().accessCodeMode`. Neither this read nor
+   * {@link setAccessCodeMode} is gated on the community's Directory Access
+   * Codes setting — the mode is configuration a manager picks before turning
+   * codes on, so both work (and never answer 403 `access_codes_disabled`)
+   * while the feature is off.
    */
   accessCodeMode(): Promise<AccessCodeModeStatus> {
     return this.client.request(endpoints.accessCodeMode());

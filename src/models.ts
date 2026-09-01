@@ -2488,6 +2488,13 @@ export function parseAccessCode(raw: unknown): AccessCode {
 export interface AccessCodes {
   accessCodes: AccessCode[];
   featureEnabled: boolean;
+  /**
+   * `"per_member"` or `"single_entry"` — the same value
+   * `community.accessCodeMode()` reports, so a caller rendering the rows
+   * knows whether to show `codeMasked` or `entryCodeMasked` without a second
+   * round trip.
+   */
+  accessCodeMode: string | null;
   result: string | null;
   raw: RawPayload;
 }
@@ -2497,6 +2504,7 @@ export function parseAccessCodes(raw: unknown): AccessCodes {
   return {
     accessCodes: arr(d.access_codes).map(parseAccessCode),
     featureEnabled: bool(d.feature_enabled),
+    accessCodeMode: str(d.access_code_mode),
     result: str(d.result),
     raw: d,
   };

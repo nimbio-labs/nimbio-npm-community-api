@@ -37,6 +37,11 @@ access-code responses gained.
   `single_entry` mode every member carries a 3-letter preamble and the visitor
   types preamble + code, so `entryCode` is the string to hand out — returned
   once, like `code`. All four are null in `per_member` mode.
+- `AccessCodes.accessCodeMode` — the mode beside the rows on `accessCodes()`,
+  so a caller rendering codes knows which masked field to show without a
+  second round trip. Neither mode call is gated on the Directory Access Codes
+  setting: they work, and never answer 403 `access_codes_disabled`, while the
+  feature is off.
 - `CommunitySettingsReadOnly.accessCodeMode` — the mode, read-only on
   `settings()`. Sending `access_code_mode` to `updateSettings()` is 422
   `invalid_setting`, deliberately, so a generic settings write can never wipe
