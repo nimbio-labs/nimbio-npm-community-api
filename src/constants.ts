@@ -42,6 +42,7 @@ export const CAPABILITIES = Object.freeze([
   "settings",
   "sense_lines",
   "nfc_tags",
+  "access_code_mode",
 ] as const);
 
 /**
@@ -185,6 +186,32 @@ export const GEOFENCE_MODES = Object.freeze(["prompt", "auto_open"] as const);
 
 /** `"prompt"` or `"auto_open"`. */
 export type GeofenceMode = (typeof GEOFENCE_MODES)[number];
+
+/**
+ * The two access-code systems a community can run, as
+ * `community.setAccessCodeMode()` accepts them.
+ *
+ * Closed, like {@link GEOFENCE_MODES}: the API validates `mode` against
+ * exactly these two and rejects anything else with 422 `invalid_mode`.
+ *
+ * - `"per_member"` — the default. A visitor picks the member they are visiting
+ *   in the GuestView directory and types that member's code. Codes are unique
+ *   per member, so two members may hold the same digits.
+ * - `"single_entry"` — one "Enter access code" field for the whole community.
+ *   Every member carries a 3-letter **preamble** (A–Z, derived from their
+ *   name, unique within the community) and the visitor types preamble
+ *   followed by code, e.g. `ESM481502`.
+ *
+ * **Switching between them deletes every access code in the community** —
+ * see `community.setAccessCodeMode()` for the confirmation handshake.
+ */
+export const ACCESS_CODE_MODES = Object.freeze([
+  "per_member",
+  "single_entry",
+] as const);
+
+/** `"per_member"` or `"single_entry"`. */
+export type AccessCodeMode = (typeof ACCESS_CODE_MODES)[number];
 
 /**
  * The four configuration audit trails `community.changeLogs()` can read.

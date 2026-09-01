@@ -39,6 +39,7 @@ const SETTINGS = {
     allow_guest_view_entry: false,
     event_keys_enabled: true,
     community_type: 3,
+    access_code_mode: "per_member",
   },
   terminology: {
     member: { singular: "Tenant", plural: "Tenants", icon: "person" },
@@ -96,6 +97,9 @@ describe("community settings", () => {
     // The RESOLVED answer, not the settable override.
     expect(readOnly.eventKeysEnabled).toBe(true);
     expect(readOnly.communityType).toBe(3);
+    // Read-only HERE: the one flag an API key can change, but only through
+    // setAccessCodeMode(), because flipping it deletes every access code.
+    expect(readOnly.accessCodeMode).toBe("per_member");
   });
 
   it("updateSettings() PATCHes camelCase keys as snake_case under `settings`", async () => {

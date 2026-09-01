@@ -17,6 +17,7 @@ import {
 import * as errors from "./errors.js";
 import * as sse from "./sse.js";
 import type {
+  AccessCodeMode,
   ChangeLogType,
   GeofenceMode,
   GuestLinkType,
@@ -29,6 +30,8 @@ import type {
   AccessCodeCreateResult,
   AccessCodeEligibleLatches,
   AccessCodeLogPage,
+  AccessCodeModeChange,
+  AccessCodeModeStatus,
   AccessCodeTemporalInput,
   AccessCodeWriteResult,
   BulkAddItem,
@@ -1372,6 +1375,89 @@ export class Community {
   ): Promise<AccessCodeLogPage> {
     return this.client.request(
       endpoints.accessCodeLogs(opts.limit ?? 50, opts.offset ?? 0),
+    );
+  }
+
+  /**
+   * Which of the two access-code systems the community runs, and what a
+   * switch would cost.
+   *
+   * - `"per_member"` — the default. A visitor at the GuestView directory finds
+   *   the member they are visiting, taps the lock on that row and types that
+   *   member's code. Codes are unique *per member*, so two members may hold
+   *   the same digits.
+   * - `"single_entry"` — one "Enter access code" field for the whole
+   *   community, no member picking. Every member carries a 3-letter
+   *   **preamble** (A–Z, derived from their name, unique within the community)
+   *   and the visitor types preamble followed by code, e.g. `ESM481502`. Codes
+   *   minted through this API carry the key owner's preamble: {@link accessCodes}
+   *   reports `preamble` / `entryCodeMasked` per row and {@link createAccessCode}
+   *   returns the full `entryCode` once.
+   *
+   * `flipPreview` is a read-only dry run of {@link setAccessCodeMode} to the
+   * *other* mode: `codesToDelete` — **every** code in the community goes,
+   * residents' own included, because the strings change meaning;
+   * `membersAffected` — how many members lose at least one code and will be
+   * notified; `membersToAssignPreamble` — how many members would be given a
+   * preamble (zero when switching back to `per_member`). Read this before you
+   * flip, so you can show the cost to a human first.
+   *
+   * The mode is also on `settings().readOnly.accessCodeMode`.
+   */
+  accessCodeMode(): Promise<AccessCodeModeStatus> {
+    return this.client.request(endpoints.accessCodeMode());
+  }
+
+  /**
+   * Switch the community between `per_member` and `single_entry` codes.
+   *
+   * **This is destructive.** Switching in either direction deletes **every**
+   * access code in the community — the ones this key minted, the ones other
+   * integrations minted, and the ones residents made for themselves in the
+   * app — because a code's meaning changes with the mode (`481502` versus
+   * `ESM481502`). Every member who lost a code is notified by push and a
+   * community-wide message explains the new system. Switching to
+   * `single_entry` also assigns a preamble to every member who lacks one.
+   * Redemption log rows are kept.
+   *
+   * So the call is a two-step handshake, the same one {@link updateNfcTag}
+   * uses:
+   *
+   * 1. Call `setAccessCodeMode("single_entry")`. If the community is already
+   *    in that mode you get back `changed: false` and nothing happens.
+   *    Otherwise it **throws {@link ConflictError}** (409
+   *    `requires_confirmation`) and, again, nothing happens. The error's
+   *    `.response` carries the same counts {@link accessCodeMode} reports, at
+   *    `error.preview` in wire (snake_case) form.
+   * 2. Show the preview to a human, then repeat with `{ confirm: true }`. The
+   *    live result reports `deletedCodes` and `notifiedMembers`.
+   *
+   * ```ts
+   * try {
+   *   await community.setAccessCodeMode("single_entry");
+   * } catch (e) {
+   *   if (!(e instanceof ConflictError)) throw e;
+   *   // ...show community.accessCodeMode().flipPreview to a human...
+   *   await community.setAccessCodeMode("single_entry", { confirm: true });
+   * }
+   * ```
+   *
+   * A caller that always passes `confirm: true` has opted out of the safety
+   * net — do that only behind your own confirmation step. Sending the mode to
+   * {@link updateSettings} instead is refused with 422 `invalid_setting`,
+   * precisely so a generic settings write can never wipe every code by
+   * accident. A value outside {@link ACCESS_CODE_MODES} is 422 `invalid_mode`.
+   *
+   * **Test keys** run the 409 handshake exactly as above, and `confirm: true`
+   * then answers `simulated: true` with `wouldChange` holding the preview —
+   * without deleting or notifying anything.
+   */
+  setAccessCodeMode(
+    mode: AccessCodeMode,
+    opts: { confirm?: boolean } = {},
+  ): Promise<AccessCodeModeChange> {
+    return this.client.request(
+      endpoints.setAccessCodeMode(mode, opts.confirm === true),
     );
   }
 

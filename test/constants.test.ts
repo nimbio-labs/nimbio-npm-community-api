@@ -4,6 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+  ACCESS_CODE_MODES,
   ACCOUNT_KEY_CAPABILITIES,
   CAPABILITIES,
   CHANGE_LOG_TYPES,
@@ -16,15 +17,15 @@ import {
 import { mockFetch, TEST_KEY } from "./helpers.js";
 
 describe("CAPABILITIES", () => {
-  it("is the API's 21 append-only capability names", () => {
+  it("is the API's 22 append-only capability names", () => {
     expect(CAPABILITIES).toEqual([
       "open", "gate_status", "key_statuses", "hold_opens", "webhooks",
       "members", "messages", "access_logs", "key_schedules", "key_usage",
       "change_logs", "homes", "short_codes", "guest_view_entry", "access_codes",
       "guest_links", "map", "open_notifications", "settings", "sense_lines",
-      "nfc_tags",
+      "nfc_tags", "access_code_mode",
     ]);
-    expect(CAPABILITIES).toHaveLength(21);
+    expect(CAPABILITIES).toHaveLength(22);
     expect(new Set(CAPABILITIES).size).toBe(CAPABILITIES.length);
     expect(Object.isFrozen(CAPABILITIES)).toBe(true);
   });
@@ -89,6 +90,16 @@ describe("GEOFENCE_MODES", () => {
 
   it("is frozen, so a caller cannot mutate the shipped vocabulary", () => {
     expect(Object.isFrozen(GEOFENCE_MODES)).toBe(true);
+  });
+});
+
+describe("ACCESS_CODE_MODES", () => {
+  it("is the closed pair the access-code mode PUT accepts", () => {
+    expect(ACCESS_CODE_MODES).toEqual(["per_member", "single_entry"]);
+  });
+
+  it("is frozen, so a caller cannot mutate the shipped vocabulary", () => {
+    expect(Object.isFrozen(ACCESS_CODE_MODES)).toBe(true);
   });
 });
 

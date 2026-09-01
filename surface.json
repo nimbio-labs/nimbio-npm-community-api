@@ -44,6 +44,16 @@
       "builder": "accessCodeLogs"
     },
     {
+      "method": "GET",
+      "path": "/v1/community/access-codes/mode",
+      "builder": "accessCodeMode"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/community/access-codes/mode",
+      "builder": "setAccessCodeMode"
+    },
+    {
       "method": "DELETE",
       "path": "/v1/community/access-codes/{p0}",
       "builder": "deleteAccessCode"

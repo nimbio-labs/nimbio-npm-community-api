@@ -15,7 +15,7 @@ import {
   type CacheStats,
 } from "./cache.js";
 import * as errors from "./errors.js";
-import type { ChangeLogType, GeofenceMode } from "./constants.js";
+import type { AccessCodeMode, ChangeLogType, GeofenceMode } from "./constants.js";
 import { resolveBaseUrl } from "./environments.js";
 import * as models from "./models.js";
 import { VERSION } from "./version.js";
@@ -1317,6 +1317,29 @@ export const endpoints = {
       path: "/v1/community/access-codes/logs",
       params: { limit, offset },
       parse: models.parseAccessCodeLogPage,
+    };
+  },
+
+  accessCodeMode(): EndpointSpec<models.AccessCodeModeStatus> {
+    return {
+      method: "GET",
+      path: "/v1/community/access-codes/mode",
+      parse: models.parseAccessCodeModeStatus,
+    };
+  },
+
+  setAccessCodeMode(
+    mode: AccessCodeMode,
+    confirm = false,
+  ): EndpointSpec<models.AccessCodeModeChange> {
+    // `confirm` always goes on the wire as a JSON boolean: the server honours
+    // only the literal `true`, and an explicit `false` is the dry run that
+    // answers 409 with the preview, so there is nothing to gain by omitting it.
+    return {
+      method: "PUT",
+      path: "/v1/community/access-codes/mode",
+      body: { mode, confirm },
+      parse: models.parseAccessCodeModeChange,
     };
   },
 

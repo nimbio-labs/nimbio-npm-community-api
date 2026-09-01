@@ -61,6 +61,7 @@ export {
   GEOFENCE_MODES,
   CHANGE_LOG_TYPES,
   KEY_USAGE_REPORT_TYPES,
+  ACCESS_CODE_MODES,
   hasCapability,
 } from "./constants.js";
 export type {
@@ -71,6 +72,7 @@ export type {
   GeofenceMode,
   ChangeLogType,
   KeyUsageReportType,
+  AccessCodeMode,
 } from "./constants.js";
 
 // Error hierarchy
@@ -182,6 +184,9 @@ export type {
   AccessCodeLogEntry,
   AccessCodeLogPage,
   AccessCodeTemporalInput,
+  AccessCodeModePreview,
+  AccessCodeModeStatus,
+  AccessCodeModeChange,
   GuestViewEntry,
   GuestViewEntryScheduleWindow,
   GuestViewEntryLogEntry,

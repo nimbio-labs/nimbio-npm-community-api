@@ -7,7 +7,7 @@
  * `start_time`/`end_time` every other schedule in the API uses.
  */
 import { describe, expect, it } from "vitest";
-import { NimbioClient } from "../src/index.js";
+import { APIError, ConflictError, NimbioClient } from "../src/index.js";
 import { mockFetch, TEST_KEY } from "./helpers.js";
 
 function client(responses: Parameters<typeof mockFetch>[0]) {
@@ -235,5 +235,238 @@ describe("access codes", () => {
     expect(created.accessCode!.directoryAccessCodeId).toBe(0);
     // Nothing was minted, so there is no PIN to hand out.
     expect(created.code).toBeNull();
+    expect(created.entryCode).toBeNull();
+  });
+
+  it("in single_entry mode a row carries the preamble and a masked entry code", async () => {
+    // The preamble is in clear (it is not a secret — it is derived from the
+    // member's name), the code stays masked, and the two are pre-joined into
+    // what the visitor would type.
+    const { client: c } = client({
+      body: {
+        result: "ok",
+        feature_enabled: true,
+        access_codes: [{ ...CODE_ROW, preamble: "ESM", entry_code_masked: "ESM******" }],
+      },
+    });
+
+    const row = (await c.community.accessCodes()).accessCodes[0]!;
+
+    expect(row.preamble).toBe("ESM");
+    expect(row.entryCodeMasked).toBe("ESM******");
+    expect(row.codeMasked).toBe("******");
+  });
+
+  it("in per_member mode the preamble fields are null, not missing", async () => {
+    const { client: c } = client({
+      body: { result: "ok", feature_enabled: true, access_codes: [CODE_ROW] },
+    });
+
+    const row = (await c.community.accessCodes()).accessCodes[0]!;
+
+    expect(row.preamble).toBeNull();
+    expect(row.entryCodeMasked).toBeNull();
+  });
+
+  it("createAccessCode() returns the full entry code once in single_entry mode", async () => {
+    // `entry_code` is preamble + code — the string the visitor types. Like
+    // `code`, this response is the only place it ever appears, so it is
+    // lifted to the top level beside it.
+    const { client: c } = client({
+      body: {
+        result: "ok",
+        request_id: "r1",
+        access_code: {
+          directory_access_code_id: 413,
+          code: "481502",
+          code_normalized: "481502",
+          preamble: "ESM",
+          entry_code: "ESM481502",
+          account_id: "a1",
+          key_id: "k1",
+          latch_ids: ["l1"],
+        },
+      },
+    });
+
+    const created = await c.community.createAccessCode("481502", ["l1"]);
+
+    expect(created.accessCode!.preamble).toBe("ESM");
+    expect(created.accessCode!.entryCode).toBe("ESM481502");
+    expect(created.entryCode).toBe("ESM481502");
+    expect(created.code).toBe("481502");
+  });
+});
+
+describe("access-code mode", () => {
+  const PREVIEW = {
+    mode: "per_member",
+    new_mode: "single_entry",
+    codes_to_delete: 14,
+    members_affected: 9,
+    members_to_assign_preamble: 112,
+  };
+
+  it("accessCodeMode() reports the mode in force and the cost of flipping it", async () => {
+    const { client: c, calls } = client({
+      body: {
+        result: "ok",
+        mode: "per_member",
+        flip_preview: {
+          new_mode: "single_entry",
+          codes_to_delete: 14,
+          members_affected: 9,
+          members_to_assign_preamble: 112,
+        },
+      },
+    });
+
+    const status = await c.community.accessCodeMode();
+
+    expect(calls[0]!.method).toBe("GET");
+    expect(calls[0]!.url).toContain("/v1/community/access-codes/mode");
+    expect(status.mode).toBe("per_member");
+    expect(status.flipPreview.newMode).toBe("single_entry");
+    // EVERY code in the community, residents' own included.
+    expect(status.flipPreview.codesToDelete).toBe(14);
+    expect(status.flipPreview.membersAffected).toBe(9);
+    expect(status.flipPreview.membersToAssignPreamble).toBe(112);
+    // The status carries the current mode; the preview does not repeat it.
+    expect(status.flipPreview.mode).toBeNull();
+  });
+
+  it("setAccessCodeMode() to the current mode is a no-op, with or without confirm", async () => {
+    const { client: c, calls } = client({
+      body: { result: "ok", mode: "per_member", changed: false, request_id: "r1" },
+    });
+
+    const result = await c.community.setAccessCodeMode("per_member");
+
+    expect(calls[0]!.method).toBe("PUT");
+    expect(calls[0]!.url).toContain("/v1/community/access-codes/mode");
+    // `confirm` is always a JSON boolean on the wire; absent means false.
+    expect(calls[0]!.body).toEqual({ mode: "per_member", confirm: false });
+    expect(result.changed).toBe(false);
+    expect(result.mode).toBe("per_member");
+    expect(result.deletedCodes).toBeNull();
+    expect(result.notifiedMembers).toBeNull();
+    expect(result.wouldChange).toBeNull();
+    expect(result.simulated).toBe(false);
+    expect(result.requestId).toBe("r1");
+  });
+
+  it("an unconfirmed switch throws ConflictError carrying the preview, and confirm:true goes through", async () => {
+    // The headline flow, and the same one updateNfcTag() uses: the 409 is a
+    // warning with the blast radius attached, not a veto. Nothing changed on
+    // the first call; only the confirmed retry deletes anything.
+    const { client: c, calls } = client([
+      {
+        status: 409,
+        body: {
+          error: {
+            code: "requires_confirmation",
+            message: "Switching access code mode deletes every existing access code…",
+            preview: PREVIEW,
+            request_id: "r1",
+          },
+        },
+      },
+      {
+        body: {
+          result: "ok",
+          mode: "single_entry",
+          changed: true,
+          deleted_codes: 14,
+          notified_members: 9,
+          request_id: "r2",
+        },
+      },
+    ]);
+
+    let switched;
+    try {
+      await c.community.setAccessCodeMode("single_entry");
+      throw new Error("expected the warning");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConflictError);
+      expect(e).toMatchObject({ code: "requires_confirmation", status: 409 });
+      // The preview rides on the raw envelope, snake_case, for a caller that
+      // wants to show it without a second round trip to accessCodeMode().
+      expect((e as ConflictError).response).toMatchObject({
+        error: { preview: PREVIEW },
+      });
+      switched = await c.community.setAccessCodeMode("single_entry", { confirm: true });
+    }
+
+    expect(switched.changed).toBe(true);
+    expect(switched.mode).toBe("single_entry");
+    expect(switched.deletedCodes).toBe(14);
+    expect(switched.notifiedMembers).toBe(9);
+    expect(switched.simulated).toBe(false);
+    expect(switched.wouldChange).toBeNull();
+    expect(calls[0]!.body).toEqual({ mode: "single_entry", confirm: false });
+    expect(calls[1]!.body).toEqual({ mode: "single_entry", confirm: true });
+    // A 409 is not retryable transport-wise, so exactly two round trips.
+    expect(calls).toHaveLength(2);
+  });
+
+  it("a confirmed switch on a test key is simulated: nothing deleted, the preview returned", async () => {
+    // `changed` must read false — a test key never touches real codes — and
+    // the mode is taken from the preview so a caller can still log intent.
+    const { client: c } = client({
+      body: { result: "simulated", would_change: PREVIEW, request_id: "r3" },
+    });
+
+    const result = await c.community.setAccessCodeMode("single_entry", { confirm: true });
+
+    expect(result.simulated).toBe(true);
+    expect(result.changed).toBe(false);
+    expect(result.mode).toBe("single_entry");
+    expect(result.wouldChange!.mode).toBe("per_member");
+    expect(result.wouldChange!.newMode).toBe("single_entry");
+    expect(result.wouldChange!.codesToDelete).toBe(14);
+    expect(result.wouldChange!.membersAffected).toBe(9);
+    expect(result.wouldChange!.membersToAssignPreamble).toBe(112);
+    expect(result.deletedCodes).toBeNull();
+    expect(result.notifiedMembers).toBeNull();
+  });
+
+  it("an unknown mode is the server's 422 invalid_mode, forwarded verbatim", async () => {
+    // The type is closed so TypeScript catches this; a JS caller still gets
+    // the server's own rejection rather than a client guess.
+    const { client: c, calls } = client({
+      status: 422,
+      body: {
+        error: {
+          code: "invalid_mode",
+          message: "Unknown access code mode 'keypad'; expected per_member or single_entry",
+          request_id: "r4",
+        },
+      },
+    });
+
+    await expect(
+      c.community.setAccessCodeMode("keypad" as unknown as "per_member"),
+    ).rejects.toSatisfy((e: unknown) => {
+      expect(e).toBeInstanceOf(APIError);
+      expect(e).toMatchObject({ code: "invalid_mode", status: 422 });
+      return true;
+    });
+    expect(calls[0]!.body).toEqual({ mode: "keypad", confirm: false });
+  });
+
+  it("only a literal `true` confirms; anything else is sent as false", async () => {
+    // The server honours only the JSON boolean true, so the client never
+    // forwards a truthy-but-not-true value that would silently be a dry run
+    // on one side and look like a confirmation on the other.
+    const { client: c, calls } = client({
+      body: { result: "ok", mode: "per_member", changed: false },
+    });
+
+    await c.community.setAccessCodeMode("per_member", { confirm: undefined });
+    await c.community.setAccessCodeMode("per_member", {});
+
+    expect(calls[0]!.body).toEqual({ mode: "per_member", confirm: false });
+    expect(calls[1]!.body).toEqual({ mode: "per_member", confirm: false });
   });
 });

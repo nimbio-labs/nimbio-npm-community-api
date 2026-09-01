@@ -1788,6 +1788,10 @@ export function parseCommunitySettingsValues(
  * - `eventKeysEnabled` is the **resolved** answer for event keys: the settable
  *   `eventKeysOverride` (`inherit`/`allow`/`deny`) combined with the property
  *   type's default. Read this, not the override, to know whether event keys work.
+ * - `accessCodeMode` (`per_member` / `single_entry`) is the one read-only value
+ *   an API key *can* change — but only through `community.setAccessCodeMode()`,
+ *   because switching it deletes every access code in the community and needs
+ *   an explicit confirm. Sending it to `updateSettings()` is 422 `invalid_setting`.
  */
 export interface CommunitySettingsReadOnly {
   allowHoldOpens: boolean;
@@ -1795,6 +1799,8 @@ export interface CommunitySettingsReadOnly {
   allowGuestViewEntry: boolean;
   eventKeysEnabled: boolean;
   communityType: number | null;
+  /** `"per_member"` or `"single_entry"`; change it with `setAccessCodeMode()`. */
+  accessCodeMode: string | null;
   raw: RawPayload;
 }
 
@@ -1808,6 +1814,7 @@ export function parseCommunitySettingsReadOnly(
     allowGuestViewEntry: bool(d.allow_guest_view_entry),
     eventKeysEnabled: bool(d.event_keys_enabled),
     communityType: num(d.community_type),
+    accessCodeMode: str(d.access_code_mode),
     raw: d,
   };
 }
@@ -2432,6 +2439,13 @@ export interface AccessCode {
   /** Asterisks, never the digits. */
   codeMasked: string | null;
   codeLength: number | null;
+  /**
+   * The owner's 3-letter preamble in `single_entry` mode — what the visitor
+   * types before the code. Null in `per_member` mode.
+   */
+  preamble: string | null;
+  /** `preamble` + masked code (e.g. `ESM******`); null in `per_member` mode. */
+  entryCodeMasked: string | null;
   disabled: boolean;
   /** Absolute UTC cutoff, or null for none. */
   expiresAt: string | null;
@@ -2452,6 +2466,8 @@ export function parseAccessCode(raw: unknown): AccessCode {
     apiManaged: bool(d.api_managed),
     codeMasked: str(d.code_masked),
     codeLength: num(d.code_length),
+    preamble: str(d.preamble),
+    entryCodeMasked: str(d.entry_code_masked),
     disabled: bool(d.disabled),
     expiresAt: str(d.expires_at),
     hasSchedule: bool(d.has_schedule),
@@ -2498,6 +2514,17 @@ export interface NewAccessCode {
   /** **Secret** — the cleartext PIN, returned exactly once. */
   code: string | null;
   codeNormalized: string | null;
+  /**
+   * The key owner's 3-letter preamble in `single_entry` mode; null in
+   * `per_member` mode.
+   */
+  preamble: string | null;
+  /**
+   * **Secret** — `preamble` + `code` (e.g. `ESM481502`), the full string the
+   * visitor types in `single_entry` mode. Returned exactly once, like `code`.
+   * Null in `per_member` mode, where the visitor types `code` alone.
+   */
+  entryCode: string | null;
   accountId: string | null;
   keyId: string | null;
   latchIds: string[];
@@ -2510,6 +2537,8 @@ export function parseNewAccessCode(raw: unknown): NewAccessCode {
     directoryAccessCodeId: num(d.directory_access_code_id),
     code: str(d.code),
     codeNormalized: str(d.code_normalized),
+    preamble: str(d.preamble),
+    entryCode: str(d.entry_code),
     accountId: str(d.account_id),
     keyId: str(d.key_id),
     latchIds: arr(d.latch_ids).filter((x): x is string => typeof x === "string"),
@@ -2523,11 +2552,21 @@ export function parseNewAccessCode(raw: unknown): NewAccessCode {
  * **`code` is the cleartext PIN and comes back exactly once.** Store or deliver
  * it in this call or it is gone. A test-mode key validates and creates nothing
  * (`result: "simulated"`).
+ *
+ * What the visitor types depends on the community's access-code mode
+ * (`community.accessCodeMode()`): `code` in `per_member` mode, `entryCode`
+ * (preamble + code) in `single_entry` mode. Hand out `entryCode` when it is
+ * non-null; it is returned only here, like `code`.
  */
 export interface AccessCodeCreateResult {
   accessCode: NewAccessCode | null;
   /** Convenience mirror of `accessCode.code` — the cleartext PIN. */
   code: string | null;
+  /**
+   * Convenience mirror of `accessCode.entryCode` — preamble + PIN, the full
+   * string a visitor types in `single_entry` mode. Null in `per_member` mode.
+   */
+  entryCode: string | null;
   directoryAccessCodeId: number | null;
   result: string | null;
   requestId: string | null;
@@ -2542,6 +2581,7 @@ export function parseAccessCodeCreateResult(raw: unknown): AccessCodeCreateResul
   return {
     accessCode,
     code: accessCode?.code ?? null,
+    entryCode: accessCode?.entryCode ?? null,
     directoryAccessCodeId:
       num(d.directory_access_code_id) ?? accessCode?.directoryAccessCodeId ?? null,
     result: str(d.result),
@@ -2672,6 +2712,121 @@ export function parseAccessCodeLogPage(raw: unknown): AccessCodeLogPage {
     logs: arr(d.logs).map(parseAccessCodeLogEntry),
     limit: num(d.limit),
     offset: num(d.offset),
+    raw: d,
+  };
+}
+
+/**
+ * What switching the community's access-code mode would do — or, after a
+ * confirmed switch on a test key, would have done.
+ *
+ * Every count is community-wide: `codesToDelete` is **every** access code in
+ * the community, residents' own included, because the strings change meaning
+ * between modes; `membersAffected` is how many members lose at least one code
+ * and will be notified; `membersToAssignPreamble` is how many members would be
+ * given a 3-letter preamble (zero when switching back to `per_member`).
+ *
+ * Reached three ways, all the same shape: `community.accessCodeMode()` reports
+ * it as `flipPreview` (`mode` is null there — the status carries the current
+ * mode itself); an unconfirmed `community.setAccessCodeMode()` throws
+ * `ConflictError` with the snake_case original at `error.preview` on
+ * `.response`; and a confirmed test-key switch returns it as `wouldChange`.
+ */
+export interface AccessCodeModePreview {
+  /** The mode currently in force. Null on `flipPreview`, where the status reports it. */
+  mode: string | null;
+  /** The mode the switch would move to. */
+  newMode: string | null;
+  codesToDelete: number | null;
+  membersAffected: number | null;
+  membersToAssignPreamble: number | null;
+  raw: RawPayload;
+}
+
+export function parseAccessCodeModePreview(raw: unknown): AccessCodeModePreview {
+  const d = asObject(raw);
+  return {
+    mode: str(d.mode),
+    newMode: str(d.new_mode),
+    codesToDelete: num(d.codes_to_delete),
+    membersAffected: num(d.members_affected),
+    membersToAssignPreamble: num(d.members_to_assign_preamble),
+    raw: d,
+  };
+}
+
+/**
+ * Result of `community.accessCodeMode()` — which of the two access-code
+ * systems the community runs, and what switching to the other would cost.
+ *
+ * `mode` is `"per_member"` or `"single_entry"` (see `ACCESS_CODE_MODES`);
+ * `flipPreview` is a read-only dry run of `community.setAccessCodeMode()` to
+ * the *other* mode. Read it before you flip, so you can show the cost to a
+ * human first.
+ */
+export interface AccessCodeModeStatus {
+  mode: string | null;
+  flipPreview: AccessCodeModePreview;
+  result: string | null;
+  raw: RawPayload;
+}
+
+export function parseAccessCodeModeStatus(raw: unknown): AccessCodeModeStatus {
+  const d = asObject(raw);
+  return {
+    mode: str(d.mode),
+    flipPreview: parseAccessCodeModePreview(d.flip_preview),
+    result: str(d.result),
+    raw: d,
+  };
+}
+
+/**
+ * Result of a `community.setAccessCodeMode()` call that did **not** throw.
+ *
+ * Three outcomes share this shape; branch on `changed` and `simulated`:
+ *
+ * - **Already in that mode** — `changed: false`, nothing deleted, `mode` is
+ *   the mode in force. Happens with or without `confirm`.
+ * - **Switched (live key, `confirm: true`)** — `changed: true`; `deletedCodes`
+ *   and `notifiedMembers` report what the switch did.
+ * - **Validated (test key, `confirm: true`)** — `simulated: true`,
+ *   `changed: false`, and `wouldChange` holds the preview of what a live key
+ *   would have done. Nothing was deleted or notified; `mode` is taken from
+ *   `wouldChange.newMode`.
+ *
+ * The fourth outcome, a switch that needs confirming, is not a result at all:
+ * it throws `ConflictError` (409 `requires_confirmation`).
+ */
+export interface AccessCodeModeChange {
+  mode: string | null;
+  /** True only when a live key actually switched the community. */
+  changed: boolean;
+  /** Codes removed by a live switch; null when nothing changed or was simulated. */
+  deletedCodes: number | null;
+  /** Members notified by a live switch; null when nothing changed or was simulated. */
+  notifiedMembers: number | null;
+  /** What a test-key switch *would* have done. Null on a live call. */
+  wouldChange: AccessCodeModePreview | null;
+  result: string | null;
+  requestId: string | null;
+  simulated: boolean;
+  raw: RawPayload;
+}
+
+export function parseAccessCodeModeChange(raw: unknown): AccessCodeModeChange {
+  const d = asObject(raw);
+  const wouldChange =
+    d.would_change == null ? null : parseAccessCodeModePreview(d.would_change);
+  return {
+    mode: str(d.mode) ?? wouldChange?.newMode ?? null,
+    changed: bool(d.changed),
+    deletedCodes: num(d.deleted_codes),
+    notifiedMembers: num(d.notified_members),
+    wouldChange,
+    result: str(d.result),
+    requestId: str(d.request_id),
+    simulated: d.result === "simulated",
     raw: d,
   };
 }
