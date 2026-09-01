@@ -1,7 +1,7 @@
 {
   "sdk": "npm",
   "package": "@nimbio/community-api",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "endpoints": [
     {
       "method": "GET",

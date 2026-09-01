@@ -161,6 +161,9 @@ await client.community.updateAccessCode(DIRECTORY_ACCESS_CODE_ID, { disabled: tr
 await client.community.deleteAccessCode(DIRECTORY_ACCESS_CODE_ID);
 await client.community.accessCodeEligibleLatches();      // CM-set allowlist; read before writing
 await client.community.accessCodeLogs({ limit: 50, offset: 0 });
+await client.community.accessCodeMode();                 // -> .mode "per_member"|"single_entry", .flipPreview
+await client.community.setAccessCodeMode("single_entry");                 // 409 ConflictError = preview, nothing changed
+await client.community.setAccessCodeMode("single_entry", { confirm: true }); // DELETES EVERY CODE in the community
 
 // GuestView Entry — master switch + eligible gates + recurring windows (LATCH-local)
 await client.community.guestViewEntry();                 // -> GuestViewEntry  READ THIS FIRST
@@ -259,7 +262,7 @@ the API validates both against exactly those values, so `GeofenceMode` and
 `ChangeLogType` are typed closed and a typo is a compile error rather than a
 422. `community.map()` echoes the server's own mode list as `geofenceModes`.
 
-`CAPABILITIES` is the 21 endpoint families a community-scoped key can carry;
+`CAPABILITIES` is the 22 endpoint families a community-scoped key can carry;
 `ACCOUNT_KEY_CAPABILITIES` is what an account-scoped key gets — `open`, and
 nothing else. `STREAM_EVENT_TYPES` is the ten event types, one vocabulary used
 by both webhook subscriptions and `streamEvents()`.
@@ -315,6 +318,22 @@ typo-avoidance.
   expires on its own, and its wire keys are `start`/`end` — the only schedule in
   the API spelled that way. Update and delete reach **only codes this key
   created** (`apiManaged`); a resident's own PIN is a 404.
+- **`setAccessCodeMode()` deletes EVERY access code in the community** — this
+  key's, other integrations', residents' own — in either direction, and
+  notifies every affected member. Read `accessCodeMode()` first: `.mode` is
+  `"per_member"` (visitor picks the member, types their code) or
+  `"single_entry"` (one field; visitor types the member's 3-letter preamble +
+  code, `ESM481502`), and `.flipPreview` says what a switch would cost
+  (`codesToDelete`, `membersAffected`, `membersToAssignPreamble`). The write is
+  the NFC handshake: without `{ confirm: true }` it throws `ConflictError`
+  (409 `requires_confirmation`, preview on `response.error.preview`) and
+  changes nothing; show the counts to a human, then repeat with
+  `{ confirm: true }`. Already in that mode is `changed: false`. A test key
+  answers `simulated: true` + `wouldChange`. In `single_entry` mode hand the
+  visitor `createAccessCode().entryCode` (preamble + PIN, returned once), not
+  `code`; `accessCodes()` rows carry `preamble` / `entryCodeMasked`. The mode
+  is read-only on `settings().readOnly.accessCodeMode`; PATCHing it there is
+  a 422 on purpose.
 - **GuestView Entry windows wrap past midnight and reject `"24:00"`** — same
   rule as quiet hours, the opposite of hold opens and key schedules. The
   schedule is a **whitelist**: a latch with no windows is open to guests at any

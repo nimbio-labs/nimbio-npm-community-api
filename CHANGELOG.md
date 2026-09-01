@@ -3,6 +3,46 @@
 All notable changes to `@nimbio/community-api` are documented here. This project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] - 2026-09-01
+
+Single-entry access codes. A community can now run one of two access-code
+systems, and this release wraps the two new operations that read and switch
+between them (`nimbio-public-api` 0.12.0), plus the fields the existing
+access-code responses gained.
+
+### Added
+
+- **`community.accessCodeMode()`** → `AccessCodeModeStatus`: the mode in force
+  (`"per_member"`, the default, or `"single_entry"`) and `flipPreview`, a
+  read-only dry run of switching to the other one — `codesToDelete`,
+  `membersAffected`, `membersToAssignPreamble`.
+- **`community.setAccessCodeMode(mode, { confirm })`** → `AccessCodeModeChange`.
+  **Switching is destructive in both directions**: it deletes **every** access
+  code in the community — this key's, other integrations', and residents' own
+  — because a code's meaning changes with the mode (`481502` versus
+  `ESM481502`). Affected members are notified and a community-wide message is
+  sent. So the call is the same two-step handshake `updateNfcTag()` uses:
+  without `confirm: true` a switch that would change anything throws
+  `ConflictError` (409 `requires_confirmation`) with the preview at
+  `error.preview` on `.response`, and nothing happens; repeat with
+  `{ confirm: true }` to switch. Already in that mode is `changed: false`. A
+  test key runs the handshake and then answers `simulated: true` with
+  `wouldChange` instead of deleting anything.
+- `ACCESS_CODE_MODES` / `AccessCodeMode` — the closed pair the PUT accepts;
+  anything else is 422 `invalid_mode`. `AccessCodeModePreview` is the shared
+  preview shape.
+- `AccessCode.preamble` / `AccessCode.entryCodeMasked` on `accessCodes()` rows
+  and `NewAccessCode.preamble` / `NewAccessCode.entryCode` (mirrored as
+  `AccessCodeCreateResult.entryCode`) on `createAccessCode()`. In
+  `single_entry` mode every member carries a 3-letter preamble and the visitor
+  types preamble + code, so `entryCode` is the string to hand out — returned
+  once, like `code`. All four are null in `per_member` mode.
+- `CommunitySettingsReadOnly.accessCodeMode` — the mode, read-only on
+  `settings()`. Sending `access_code_mode` to `updateSettings()` is 422
+  `invalid_setting`, deliberately, so a generic settings write can never wipe
+  every code by accident.
+- `"access_code_mode"` in `CAPABILITIES` (now 22).
+
 ## [0.6.0] - 2026-08-27
 
 Full parity with the public REST API. The client now wraps **all 93 documented

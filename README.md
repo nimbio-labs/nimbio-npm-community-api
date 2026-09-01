@@ -263,6 +263,8 @@ await client.community.updateAccessCode(DIRECTORY_ACCESS_CODE_ID, { disabled: tr
 await client.community.deleteAccessCode(DIRECTORY_ACCESS_CODE_ID);
 await client.community.accessCodeEligibleLatches(); // CM-set allowlist (read-only here)
 await client.community.accessCodeLogs({ limit: 50 });
+await client.community.accessCodeMode();            // -> AccessCodeModeStatus (.mode, .flipPreview)
+await client.community.setAccessCodeMode("single_entry", { confirm: true }); // DELETES EVERY CODE
 
 // GuestView Entry — master switch, eligible gates, recurring windows (latch-local)
 await client.community.guestViewEntry();            // -> GuestViewEntry — read before writing
@@ -327,7 +329,7 @@ const me = await client.me();
 if (!hasCapability(me.key, "hold_opens")) throw new Error("this key cannot hold gates open");
 ```
 
-`CAPABILITIES` is the 21 endpoint families a community-scoped key can be
+`CAPABILITIES` is the 22 endpoint families a community-scoped key can be
 granted; `ACCOUNT_KEY_CAPABILITIES` is the account-scoped set — `open`, and
 nothing else. `STREAM_EVENT_TYPES` is the ten event types, and it is one
 vocabulary rather than two: the same catalog a webhook subscription accepts is
@@ -614,6 +616,26 @@ but revoking an already-revoked link is a successful no-op, so retries are safe.
 Keypad / GuestView PINs. **The cleartext PIN is returned exactly once**, by
 `createAccessCode()`, on `.code`. `accessCodes()` shows `codeMasked` asterisks
 and there is no read-back: a lost PIN means delete-and-recreate.
+
+A community runs one of two access-code systems — read `accessCodeMode()`.
+In `per_member` mode (the default) a visitor picks the member in the GuestView
+directory and types that member's code. In `single_entry` mode there is one
+entry field for the whole community: every member carries a 3-letter
+**preamble** derived from their name, and the visitor types preamble + code
+(`ESM481502`). In that mode `createAccessCode()` also returns `entryCode` —
+the full string to hand out, returned once like `code` — and each
+`accessCodes()` row carries `preamble` / `entryCodeMasked`.
+
+**`setAccessCodeMode()` deletes every access code in the community**, in either
+direction, residents' own included, and notifies the affected members. It is
+the same handshake as `updateNfcTag()`: without `{ confirm: true }` a switch
+that would change anything throws `ConflictError` (409 `requires_confirmation`)
+and changes nothing; read `accessCodeMode().flipPreview` (or the error's
+`response.error.preview`), show the counts to a human, then repeat with
+`{ confirm: true }`. Already in that mode is `changed: false`. A test key runs
+the handshake and answers `simulated: true` with `wouldChange` instead of
+deleting anything. The mode is also on `settings().readOnly.accessCodeMode`;
+sending it to `updateSettings()` is a 422, on purpose.
 
 Three independent limits, which do different things:
 
