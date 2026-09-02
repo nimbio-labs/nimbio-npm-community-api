@@ -326,10 +326,10 @@ typo-avoidance.
   code, `ESM481502`), and `.flipPreview` says what a switch would cost
   (`codesToDelete`, `membersAffected`, `membersToAssignPreamble`). The write is
   the NFC handshake: without `{ confirm: true }` it throws `ConflictError`
-  (409 `requires_confirmation`, preview on `response.error.preview`) and
-  changes nothing; show the counts to a human, then repeat with
+  (409 `requires_confirmation`) carrying the same counts typed on `e.preview`,
+  and changes nothing; show them to a human, then repeat with
   `{ confirm: true }`. Already in that mode is `changed: false`. A test key
-  answers `simulated: true` + `wouldChange`. In `single_entry` mode hand the
+  answers `simulated: true` + `wouldChange` with `mode: null` (nothing moved). In `single_entry` mode hand the
   visitor `createAccessCode().entryCode` (preamble + PIN, returned once), not
   `code`; `accessCodes()` rows carry `preamble` / `entryCodeMasked`. The mode
   is read-only on `settings().readOnly.accessCodeMode`; PATCHing it there is

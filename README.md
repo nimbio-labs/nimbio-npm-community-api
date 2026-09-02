@@ -630,11 +630,12 @@ the full string to hand out, returned once like `code` — and each
 direction, residents' own included, and notifies the affected members. It is
 the same handshake as `updateNfcTag()`: without `{ confirm: true }` a switch
 that would change anything throws `ConflictError` (409 `requires_confirmation`)
-and changes nothing; read `accessCodeMode().flipPreview` (or the error's
-`response.error.preview`), show the counts to a human, then repeat with
-`{ confirm: true }`. Already in that mode is `changed: false`. A test key runs
-the handshake and answers `simulated: true` with `wouldChange` instead of
-deleting anything. The mode is also on `settings().readOnly.accessCodeMode`;
+and changes nothing; the error's `.preview` (an `AccessCodeModePreview`, the
+same counts as `accessCodeMode().flipPreview`) says what would go — show it to
+a human, then repeat with `{ confirm: true }`. Already in that mode is
+`changed: false`. A test key runs the handshake and answers `simulated: true`
+with `wouldChange` instead of deleting anything (`mode` is null there: nothing
+moved). The mode is also on `settings().readOnly.accessCodeMode`;
 sending it to `updateSettings()` is a 422, on purpose.
 
 Three independent limits, which do different things:

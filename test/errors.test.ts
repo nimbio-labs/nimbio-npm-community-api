@@ -37,6 +37,41 @@ describe("exceptionFor mapping", () => {
     expect(e).toBeInstanceOf(NimbioError);
     expect(e.name).toBe("ConflictError");
     expect(e.code).toBe("delivery_in_flight");
+    // Only the access-code mode 409 carries a preview; every other 409 is null.
+    expect(e.preview).toBeNull();
+  });
+
+  it("ConflictError parses error.preview when the envelope carries one", () => {
+    const e = new ConflictError("confirm first", {
+      status: 409,
+      code: "requires_confirmation",
+      response: {
+        error: {
+          code: "requires_confirmation",
+          preview: {
+            mode: "per_member", new_mode: "single_entry",
+            codes_to_delete: 3, members_affected: 2, members_to_assign_preamble: 40,
+          },
+        },
+      },
+    });
+    expect(e.preview).toMatchObject({
+      mode: "per_member",
+      newMode: "single_entry",
+      codesToDelete: 3,
+      membersAffected: 2,
+      membersToAssignPreamble: 40,
+    });
+  });
+
+  it("ConflictError.preview tolerates envelopes that are not objects", () => {
+    // A 409 with a text body, or an `error` that is a string, must not throw
+    // while constructing the error that reports it.
+    expect(new ConflictError("x", { status: 409, response: "conflict" }).preview).toBeNull();
+    expect(new ConflictError("x", { status: 409, response: { error: "bad" } }).preview).toBeNull();
+    expect(
+      new ConflictError("x", { status: 409, response: { error: { preview: "no" } } }).preview,
+    ).toBeNull();
   });
 
   it("maps the did_not_open code to GateNotOpenedError regardless of status", () => {

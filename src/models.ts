@@ -2737,8 +2737,8 @@ export function parseAccessCodeLogPage(raw: unknown): AccessCodeLogPage {
  * Reached three ways, all the same shape: `community.accessCodeMode()` reports
  * it as `flipPreview` (`mode` is null there — the status carries the current
  * mode itself); an unconfirmed `community.setAccessCodeMode()` throws
- * `ConflictError` with the snake_case original at `error.preview` on
- * `.response`; and a confirmed test-key switch returns it as `wouldChange`.
+ * `ConflictError` carrying it as `.preview`; and a confirmed test-key switch
+ * returns it as `wouldChange`.
  */
 export interface AccessCodeModePreview {
   /** The mode currently in force. Null on `flipPreview`, where the status reports it. */
@@ -2800,13 +2800,16 @@ export function parseAccessCodeModeStatus(raw: unknown): AccessCodeModeStatus {
  *   and `notifiedMembers` report what the switch did.
  * - **Validated (test key, `confirm: true`)** — `simulated: true`,
  *   `changed: false`, and `wouldChange` holds the preview of what a live key
- *   would have done. Nothing was deleted or notified; `mode` is taken from
- *   `wouldChange.newMode`.
+ *   would have done. Nothing was deleted or notified, and `mode` is **null**:
+ *   nothing moved, so there is no mode in force to report. The mode the call
+ *   asked for is `wouldChange.newMode`; the one the community still runs is
+ *   `wouldChange.mode`.
  *
  * The fourth outcome, a switch that needs confirming, is not a result at all:
- * it throws `ConflictError` (409 `requires_confirmation`).
+ * it throws `ConflictError` (409 `requires_confirmation`) with `.preview`.
  */
 export interface AccessCodeModeChange {
+  /** The mode in force after the call. Null on a simulated call — nothing moved. */
   mode: string | null;
   /** True only when a live key actually switched the community. */
   changed: boolean;
@@ -2827,7 +2830,9 @@ export function parseAccessCodeModeChange(raw: unknown): AccessCodeModeChange {
   const wouldChange =
     d.would_change == null ? null : parseAccessCodeModePreview(d.would_change);
   return {
-    mode: str(d.mode) ?? wouldChange?.newMode ?? null,
+    // Deliberately no fallback to wouldChange.newMode on a simulated call:
+    // nothing moved, and the Python client answers None for the same payload.
+    mode: str(d.mode),
     changed: bool(d.changed),
     deletedCodes: num(d.deleted_codes),
     notifiedMembers: num(d.notified_members),

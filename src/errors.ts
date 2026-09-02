@@ -12,6 +12,9 @@
  * error, or a specific subclass (e.g. {@link RateLimitError}) for fine control.
  */
 
+import { parseAccessCodeModePreview } from "./models.js";
+import type { AccessCodeModePreview } from "./models.js";
+
 /** Base class for every error thrown by this library. */
 export class NimbioError extends Error {
   constructor(message: string) {
@@ -114,9 +117,38 @@ export class NotFoundError extends APIError {}
  *   repeated failures. Re-enable it yourself with
  *   `community.updateWebhook(webhookId, { active: true })`, then retry.
  * - `requires_confirmation` — a warning, not a veto: the same call succeeds
- *   when repeated with `confirm: true`.
+ *   when repeated with `confirm: true`. From `community.setAccessCodeMode()`
+ *   it also carries `preview` — what the confirmed call would delete.
  */
-export class ConflictError extends APIError {}
+export class ConflictError extends APIError {
+  /**
+   * The parsed `error.preview` of the envelope, when the server sent one.
+   *
+   * Today only the access-code mode switch does: an unconfirmed
+   * `community.setAccessCodeMode()` answers 409 with the same counts
+   * `community.accessCodeMode().flipPreview` reports — `codesToDelete`,
+   * `membersAffected`, `membersToAssignPreamble` — so a caller can show the
+   * cost without a second round trip. Null for every other 409 (the NFC-tag
+   * `requires_confirmation`, `delivery_in_flight`, `webhook_disabled`, ...).
+   * The snake_case original stays on `.response`.
+   */
+  readonly preview: AccessCodeModePreview | null;
+
+  constructor(message: string, fields: APIErrorFields) {
+    super(message, fields);
+    this.preview = previewOf(fields.response);
+  }
+}
+
+/** Pull `error.preview` out of a decoded 409 body, tolerating any other shape. */
+function previewOf(response: unknown): AccessCodeModePreview | null {
+  if (typeof response !== "object" || response === null) return null;
+  const error = (response as { error?: unknown }).error;
+  if (typeof error !== "object" || error === null) return null;
+  const preview = (error as { preview?: unknown }).preview;
+  if (typeof preview !== "object" || preview === null) return null;
+  return parseAccessCodeModePreview(preview);
+}
 
 /**
  * 429 — per-minute or monthly quota exceeded.

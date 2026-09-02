@@ -23,11 +23,17 @@ access-code responses gained.
   `ESM481502`). Affected members are notified and a community-wide message is
   sent. So the call is the same two-step handshake `updateNfcTag()` uses:
   without `confirm: true` a switch that would change anything throws
-  `ConflictError` (409 `requires_confirmation`) with the preview at
-  `error.preview` on `.response`, and nothing happens; repeat with
-  `{ confirm: true }` to switch. Already in that mode is `changed: false`. A
-  test key runs the handshake and then answers `simulated: true` with
-  `wouldChange` instead of deleting anything.
+  `ConflictError` (409 `requires_confirmation`), and nothing happens; repeat
+  with `{ confirm: true }` to switch. Already in that mode is `changed: false`.
+  A test key runs the handshake and then answers `simulated: true` with
+  `wouldChange` instead of deleting anything — and `mode: null`, since
+  nothing moved (matching the Python client).
+- **`ConflictError.preview`** — the parsed `error.preview` of a 409 as an
+  `AccessCodeModePreview` (`codesToDelete`, `membersAffected`,
+  `membersToAssignPreamble`), so the cost of an unconfirmed
+  `setAccessCodeMode()` can be shown without digging through the snake_case
+  envelope or making a second call. Null on every other 409; the raw envelope
+  stays on `.response`. Matches the Python client's `ConflictError.preview`.
 - `ACCESS_CODE_MODES` / `AccessCodeMode` — the closed pair the PUT accepts;
   anything else is 422 `invalid_mode`. `AccessCodeModePreview` is the shared
   preview shape.

@@ -1432,8 +1432,8 @@ export class Community {
    *    in that mode you get back `changed: false` and nothing happens.
    *    Otherwise it **throws {@link ConflictError}** (409
    *    `requires_confirmation`) and, again, nothing happens. The error's
-   *    `.response` carries the same counts {@link accessCodeMode} reports, at
-   *    `error.preview` in wire (snake_case) form.
+   *    `.preview` is an {@link AccessCodeModePreview} — the same counts
+   *    {@link accessCodeMode} reports — so you need no second round trip.
    * 2. Show the preview to a human, then repeat with `{ confirm: true }`. The
    *    live result reports `deletedCodes` and `notifiedMembers`.
    *
@@ -1442,7 +1442,8 @@ export class Community {
    *   await community.setAccessCodeMode("single_entry");
    * } catch (e) {
    *   if (!(e instanceof ConflictError)) throw e;
-   *   // ...show community.accessCodeMode().flipPreview to a human...
+   *   const p = e.preview!; // codesToDelete, membersAffected, membersToAssignPreamble
+   *   if (!(await askHuman(`Delete ${p.codesToDelete} codes from ${p.membersAffected} members?`))) return;
    *   await community.setAccessCodeMode("single_entry", { confirm: true });
    * }
    * ```
@@ -1455,7 +1456,8 @@ export class Community {
    *
    * **Test keys** run the 409 handshake exactly as above, and `confirm: true`
    * then answers `simulated: true` with `wouldChange` holding the preview —
-   * without deleting or notifying anything.
+   * without deleting or notifying anything. `mode` is null on that result:
+   * nothing moved.
    */
   setAccessCodeMode(
     mode: AccessCodeMode,

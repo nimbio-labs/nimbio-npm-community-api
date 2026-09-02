@@ -411,8 +411,17 @@ describe("access-code mode", () => {
     } catch (e) {
       expect(e).toBeInstanceOf(ConflictError);
       expect(e).toMatchObject({ code: "requires_confirmation", status: 409 });
-      // The preview rides on the raw envelope, snake_case, for a caller that
-      // wants to show it without a second round trip to accessCodeMode().
+      // The preview is typed on the error itself, so a caller can show the
+      // cost without a second round trip to accessCodeMode() and without
+      // digging through the snake_case envelope (which stays on .response).
+      expect((e as ConflictError).preview).toEqual({
+        mode: "per_member",
+        newMode: "single_entry",
+        codesToDelete: 14,
+        membersAffected: 9,
+        membersToAssignPreamble: 112,
+        raw: PREVIEW,
+      });
       expect((e as ConflictError).response).toMatchObject({
         error: { preview: PREVIEW },
       });
@@ -432,8 +441,10 @@ describe("access-code mode", () => {
   });
 
   it("a confirmed switch on a test key is simulated: nothing deleted, the preview returned", async () => {
-    // `changed` must read false — a test key never touches real codes — and
-    // the mode is taken from the preview so a caller can still log intent.
+    // `changed` must read false and `mode` null — a test key never touches
+    // real codes, so nothing moved and there is no new mode in force to
+    // report (the Python client answers None for the same payload). The
+    // intent lives on wouldChange.newMode.
     const { client: c } = client({
       body: { result: "simulated", would_change: PREVIEW, request_id: "r3" },
     });
@@ -442,7 +453,7 @@ describe("access-code mode", () => {
 
     expect(result.simulated).toBe(true);
     expect(result.changed).toBe(false);
-    expect(result.mode).toBe("single_entry");
+    expect(result.mode).toBeNull();
     expect(result.wouldChange!.mode).toBe("per_member");
     expect(result.wouldChange!.newMode).toBe("single_entry");
     expect(result.wouldChange!.codesToDelete).toBe(14);
