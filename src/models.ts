@@ -1049,7 +1049,22 @@ export function parseCommunityInfo(raw: unknown): CommunityInfo {
 export interface MemberKey {
   keyId: string | null;
   keyName: string | null;
+  /**
+   * The key has been revoked. This does NOT include expiry — a key past its
+   * `expiresAt` still reports `false` here. Check `expiresAtValid` too if you
+   * want "is this key currently in force?".
+   */
   disabled: boolean;
+  /** UTC cutoff `"YYYY-MM-DD HH:MM:SS"`, or null for a key that never lapses. */
+  expiresAt: string | null;
+  /** `expiresAt` is set and still in the future. */
+  expiresAtValid: boolean;
+  /**
+   * A temporary key issued to a Nimbio installer for the gate they installed.
+   * It lasts 7 days, cannot be shared, and you can revoke it at any time like
+   * any other member key.
+   */
+  installerGrant: boolean;
   raw: RawPayload;
 }
 
@@ -1059,6 +1074,9 @@ export function parseMemberKey(raw: unknown): MemberKey {
     keyId: str(d.key_id),
     keyName: str(d.key_name),
     disabled: bool(d.disabled),
+    expiresAt: str(d.expires_at),
+    expiresAtValid: bool(d.expires_at_valid),
+    installerGrant: bool(d.installer_grant),
     raw: d,
   };
 }
@@ -1089,6 +1107,11 @@ export interface MemberDetail {
   subkeyCount: number | null;
   createdDatetime: string | null;
   moveOutDate: string | null;
+  /**
+   * This member is on the roster only because a Nimbio installer was granted a
+   * temporary key. The auto-revoke time is on the key (`keys[].expiresAt`).
+   */
+  installerGrant: boolean;
   bucket: string | null;
   /** Home rows only: the `accountCommunityId`s of the people in this home. */
   memberIds: number[];
@@ -1118,6 +1141,7 @@ export function parseMemberDetail(raw: unknown): MemberDetail {
     subkeyCount: num(d.subkey_count),
     createdDatetime: str(d.created_datetime),
     moveOutDate: str(d.move_out_date),
+    installerGrant: bool(d.installer_grant),
     bucket: str(d.bucket),
     memberIds: arr(d.members).filter((x): x is number => typeof x === "number"),
     memberNames: arr(d.member_names).filter(
