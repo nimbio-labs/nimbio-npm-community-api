@@ -35,6 +35,12 @@ new NimbioClient("nimbio_test_...", { baseUrl: "http://localhost:8000" });
 - Env vars: `NIMBIO_API_KEY`, `NIMBIO_ENV`, `NIMBIO_BASE_URL`.
 - Other options: `timeout` (seconds, default 30), `maxRetries` (default 2),
   `defaultHeaders`, `fetch`, and `cache` / `cacheSize` — see below.
+- Building a product on the SDK (a plugin, an assistant tool)? Pass
+  `integration: "<slug>/<version>"` (e.g. `"homebridge/0.2.0"`). Every request
+  then carries `X-Nimbio-Integration` and the User-Agent becomes
+  `nimbio-community-api-js/<sdk> homebridge/0.2.0`, so opens are attributed to
+  your product. Slug `[a-z][a-z0-9_]{1,31}`, value ≤ 80 chars; anything else
+  throws `TypeError` at construction. Unset, nothing extra is sent.
 
 ## Conditional requests: polling is cheap, ON BY DEFAULT
 

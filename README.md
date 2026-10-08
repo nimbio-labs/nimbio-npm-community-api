@@ -81,6 +81,7 @@ new NimbioClient("nimbio_test_...", { baseUrl: "http://localhost:8000" });
 | `fetch`          | `typeof fetch`             | global    | Custom `fetch` (testing, proxies, older runtimes). |
 | `cache`          | `boolean`                  | `true`    | Conditional GETs (ETag / `If-None-Match`). See [Conditional requests](#conditional-requests-etag-caching). |
 | `cacheSize`      | `number`                   | `256`     | Max cached ETags (LRU). `0` disables the cache. |
+| `integration`    | `string`                   | —         | `"<slug>/<version>"` naming the product built on the SDK, e.g. `"homebridge/0.2.0"`. Sent as `X-Nimbio-Integration` and appended to the `User-Agent`; a malformed value throws `TypeError`. |
 
 **Environments:** `prod` → `api.nimbio.com`, `dev` → `api.nimbio.dev`,
 `local` → `localhost:8000`.

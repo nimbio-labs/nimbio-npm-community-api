@@ -55,6 +55,75 @@ describe("NimbioClient top-level", () => {
     expect(calls[0]!.headers["X-Trace"]).toBe("abc");
   });
 
+  it("sends no integration header when the option is unset", async () => {
+    const { fetchImpl, calls } = mockFetch({ body: { account_id: "a", key: {} } });
+    const client = new NimbioClient(TEST_KEY, { fetch: fetchImpl });
+    await client.me();
+    expect(calls[0]!.headers["X-Nimbio-Integration"]).toBeUndefined();
+    expect(calls[0]!.headers["User-Agent"]).toBe(`nimbio-community-api-js/${VERSION}`);
+  });
+
+  it("identifies an integration on authenticated requests", async () => {
+    const { fetchImpl, calls } = mockFetch({ body: { account_id: "a", key: {} } });
+    const client = new NimbioClient(TEST_KEY, {
+      fetch: fetchImpl,
+      integration: "homebridge/0.2.0",
+    });
+    await client.me();
+    expect(calls[0]!.headers["X-Nimbio-Integration"]).toBe("homebridge/0.2.0");
+    expect(calls[0]!.headers["User-Agent"]).toBe(
+      `nimbio-community-api-js/${VERSION} homebridge/0.2.0`,
+    );
+  });
+
+  it("identifies an integration on unauthenticated requests", async () => {
+    const { fetchImpl, calls } = mockFetch({ body: { ok: true, wamp: "connected" } });
+    const client = new NimbioClient(TEST_KEY, {
+      fetch: fetchImpl,
+      integration: "mcp/0.3.0",
+    });
+    await client.health();
+    expect(calls[0]!.headers.Authorization).toBeUndefined();
+    expect(calls[0]!.headers["X-Nimbio-Integration"]).toBe("mcp/0.3.0");
+    expect(calls[0]!.headers["User-Agent"]).toBe(`nimbio-community-api-js/${VERSION} mcp/0.3.0`);
+  });
+
+  it("lets defaultHeaders override the integration headers", async () => {
+    const { fetchImpl, calls } = mockFetch({ body: { account_id: "a", key: {} } });
+    const client = new NimbioClient(TEST_KEY, {
+      fetch: fetchImpl,
+      integration: "mcp/0.3.0",
+      defaultHeaders: { "X-Nimbio-Integration": "custom/1", "User-Agent": "mine/1" },
+    });
+    await client.me();
+    expect(calls[0]!.headers["X-Nimbio-Integration"]).toBe("custom/1");
+    expect(calls[0]!.headers["User-Agent"]).toBe("mine/1");
+  });
+
+  it.each(["google_home/1.0.0", "ab/1", "a" + "b".repeat(31) + "/2026.10.0-rc.1+build"])(
+    "accepts the well-formed integration %s",
+    (integration) => {
+      expect(() => new NimbioClient(TEST_KEY, { integration })).not.toThrow();
+    },
+  );
+
+  it.each([
+    "",
+    "homebridge", // no version
+    "homebridge/", // empty version
+    "HomeBridge/1.0", // uppercase slug
+    "1home/1.0", // leading digit
+    "a/1.0", // slug too short
+    "a".repeat(33) + "/1", // slug too long
+    "home-bridge/1.0", // hyphen in slug
+    "homebridge/1.0 extra", // whitespace
+    "homebridge/1.0\r\nX-Evil: 1",
+    "x".repeat(20) + "/" + "1".repeat(60), // 81 characters
+    123 as unknown as string,
+  ])("rejects the malformed integration %j", (integration) => {
+    expect(() => new NimbioClient(TEST_KEY, { integration })).toThrow(TypeError);
+  });
+
   it("close() is a harmless no-op", () => {
     const { fetchImpl } = mockFetch({ body: {} });
     const client = new NimbioClient(TEST_KEY, { fetch: fetchImpl });

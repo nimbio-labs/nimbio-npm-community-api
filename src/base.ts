@@ -31,6 +31,35 @@ export const ENV_API_KEY = "NIMBIO_API_KEY";
 export const ENV_ENVIRONMENT = "NIMBIO_ENV";
 export const ENV_BASE_URL = "NIMBIO_BASE_URL";
 
+const USER_AGENT = `nimbio-community-api-js/${VERSION}`;
+const INTEGRATION_HEADER = "X-Nimbio-Integration";
+// "<slug>/<version>", e.g. "homebridge/0.2.0". The slug is the open-surface
+// format from nimbioCore/shared-contracts/open-surfaces.md; the version is one
+// User-Agent product-version token, so the value can be appended to the UA.
+const INTEGRATION_RE = /^[a-z][a-z0-9_]{1,31}\/[A-Za-z0-9._+-]+$/;
+const INTEGRATION_MAX_LEN = 80;
+
+/**
+ * Return `integration` unchanged, or throw a `TypeError` if it is malformed.
+ * A malformed value is a developer error, so it fails at construction rather
+ * than being sent and silently ignored by the server.
+ */
+function validateIntegration(integration: string | undefined): string | null {
+  if (integration === undefined || integration === null) return null;
+  if (
+    typeof integration !== "string" ||
+    integration.length > INTEGRATION_MAX_LEN ||
+    !INTEGRATION_RE.test(integration)
+  ) {
+    throw new TypeError(
+      `integration must look like '<slug>/<version>' (slug ` +
+        `[a-z][a-z0-9_]{1,31}, at most ${INTEGRATION_MAX_LEN} characters), ` +
+        `e.g. 'homebridge/0.2.0'; got ${JSON.stringify(integration)}`,
+    );
+  }
+  return integration;
+}
+
 /** A `fetch`-compatible function. Injectable for testing or custom transports. */
 export type FetchLike = (
   input: string,
@@ -52,6 +81,16 @@ export interface ClientOptions {
   maxRetries?: number;
   /** Extra headers merged into every request. */
   defaultHeaders?: Record<string, string>;
+  /**
+   * `"<slug>/<version>"` naming the product built on the SDK, e.g.
+   * `"homebridge/0.2.0"`. When set, every request carries
+   * `X-Nimbio-Integration` and the token is appended to the `User-Agent`, so
+   * gate opens are attributed to that product. The slug is
+   * `[a-z][a-z0-9_]{1,31}` and the whole value at most 80 characters; anything
+   * else throws a `TypeError` here. Unset, nothing extra is sent.
+   * `defaultHeaders` still win over both headers.
+   */
+  integration?: string;
   /** Custom `fetch` implementation (defaults to the global `fetch`). */
   fetch?: FetchLike;
   /**
@@ -112,10 +151,12 @@ export abstract class BaseClient {
   readonly maxRetries: number;
   protected readonly apiKey: string;
   private readonly extraHeaders: Record<string, string>;
+  private readonly integration: string | null;
   /** `null` when conditional requests are disabled. */
   private readonly etagCache: EtagCache | null;
 
   constructor(apiKey?: string, options: ClientOptions = {}) {
+    this.integration = validateIntegration(options.integration);
     const key = apiKey ?? readEnv(ENV_API_KEY);
     if (!key) {
       throw new errors.NimbioConfigError(
@@ -165,8 +206,14 @@ export abstract class BaseClient {
   private headers(auth: boolean): Record<string, string> {
     const base: Record<string, string> = {
       Accept: "application/json",
-      "User-Agent": `nimbio-community-api-js/${VERSION}`,
+      "User-Agent": USER_AGENT,
     };
+    // Unset, this is exactly the pre-`integration` header set, so older
+    // callers send byte-for-byte the same requests.
+    if (this.integration !== null) {
+      base["User-Agent"] = `${USER_AGENT} ${this.integration}`;
+      base[INTEGRATION_HEADER] = this.integration;
+    }
     if (auth) base.Authorization = `Bearer ${this.apiKey}`;
     return { ...base, ...this.extraHeaders };
   }

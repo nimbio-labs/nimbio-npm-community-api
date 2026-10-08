@@ -3,6 +3,15 @@
 All notable changes to `@nimbio/community-api` are documented here. This project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **`integration: "<slug>/<version>"`** client option — sends
+  `X-Nimbio-Integration` and appends the token to the `User-Agent` on every
+  request, so gate opens are attributed to the product built on the SDK.
+  Malformed values throw `TypeError`; unset, the requests are unchanged.
+
 ## [0.7.0] - 2026-09-01
 
 Single-entry access codes. A community can now run one of two access-code
