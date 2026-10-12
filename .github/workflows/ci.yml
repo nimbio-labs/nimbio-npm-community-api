@@ -6,12 +6,14 @@ on:
   pull_request:
 
 jobs:
+  # Full verification. Node 22.12+ only, because vitest 5 requires it — see the
+  # `compat` job below for why that does not narrow what the package supports.
   test:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        node-version: ["18", "20", "22"]
+        node-version: ["22", "24"]
     steps:
       - uses: actions/checkout@v4
 
@@ -20,6 +22,11 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: npm
+
+      # npm 10 crashes resolving vite 8's optional devtools peer chain when a
+      # dependency is added; use the npm the lockfile was made with.
+      - name: Upgrade npm
+        run: npm install -g npm@11.19.1
 
       - name: Install
         run: npm ci
@@ -35,3 +42,34 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # The package declares `engines: node >= 18` and has no runtime dependencies,
+  # so 18 and 20 stay supported. The test runner does not run there (vitest 5
+  # needs Node 22.12+), so those versions are verified the way that matters to
+  # users: the shipped build loads under both module systems and constructs a
+  # client. These legs keep the bundled npm — npm 11 does not run on Node 18,
+  # and `npm ci` from the lockfile never hits the npm 10 resolver crash.
+  compat:
+    name: node-${{ matrix.node-version }} (build + load only)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ["18", "20"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Load the build (ESM + CJS)
+        run: bash .github/smoke-load.sh

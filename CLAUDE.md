@@ -75,9 +75,17 @@ npm run check       # version:check + lint + typecheck + coverage
 ```
 
 Note: `npm run check` is not literally what CI runs. `ci.yml` runs lint,
-typecheck, coverage, and **build** as separate steps (Node 18/20/22) and does
-not run `version:check`; `publish.yml` is what runs `npm run check` (then
-build) before publishing a tag.
+typecheck, coverage, and **build** as separate steps on Node 22/24 and does
+not run `version:check`; Node 18/20 (still supported by `engines`) get a
+build + ESM/CJS load check only (`.github/smoke-load.sh`), because vitest 5
+needs Node 22.12+. `publish.yml` is what runs `npm run check` (then build)
+before publishing a tag.
+
+Use **npm ≥ 11** locally (CI pins 11.19.1). npm 10 crashes with
+`Cannot read properties of null (reading 'edgesOut')` when adding a dependency:
+vite 8's optional `@vitejs/devtools` peer pulls `vitest: "*"` into the peer set.
+esbuild's `postinstall` is left unapproved under npm 11 (`npm install-scripts
+ls`); tsup builds fine without it.
 
 Keep coverage at/near the configured thresholds. `AGENTS.md` is the LLM/agent
 usage cheat sheet — update it when the public surface changes.
