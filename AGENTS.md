@@ -244,6 +244,19 @@ for await (const msg of client.account.streamEvents({ signal })) {
 }
 await client.account.directoryCalls({ limit: 20, before }); // -> DirectoryCallPage (.calls, .nextBefore)
 for await (const call of client.account.iterDirectoryCalls()) { /* newest first */ }
+
+// Account key only: opens on YOUR keys (incl. keys you shared), newest first
+await client.account.history({ from, to, keyId, page }); // -> OpenHistoryPage (.opens, .hasMore, .dateFrom, .dateTo)
+for await (const open of client.account.iterHistory({ from: "2026-10-01" })) {
+  open.id;                                   // stable log id: UPSERT by it
+  open.openedBy.isYou; open.openedBy.name;   // name null only when none is on file
+  open.guestLink;                            // null unless a guest-link open
+  open.openType; open.result;                // OPEN vocabularies ("open", "opened", "unknown")
+}                                            // 404 key_not_found; 403 oauth_not_permitted
+// Polling: a fresh open's result lands up to ~18s later ("unknown" until then).
+// Re-read a trailing minute (`from` = newest stored openedAt - 60s) and upsert
+// by `id`; never advance `from` past rows you have already seen.
+// Known names: OPEN_HISTORY_TYPES, OPEN_HISTORY_RESULTS (open, incl. "unknown").
 ```
 
 Both stream methods share one SSE loop (`NimbioClient.streamMessages`).
@@ -288,8 +301,9 @@ the API validates both against exactly those values, so `GeofenceMode` and
 422. `community.map()` echoes the server's own mode list as `geofenceModes`.
 
 `CAPABILITIES` is the 22 endpoint families a community-scoped key can carry;
-`ACCOUNT_KEY_CAPABILITIES` is what an account-scoped key gets — `open`, plus
-`directory_call_events` where that feature is enabled for the account.
+`ACCOUNT_KEY_CAPABILITIES` is what an account-scoped key gets — `open` and
+`open_history`, plus `directory_call_events` where that feature is enabled for
+the account.
 `STREAM_EVENT_TYPES` is the ten event types, one vocabulary used by both webhook
 subscriptions and `community.streamEvents()`. `ACCOUNT_EVENT_TYPES`
 (`directory_call.ringing`, `directory_call.ended`) is the separate catalog

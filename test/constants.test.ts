@@ -2,12 +2,17 @@
  * The shipped vocabularies: they must match the server's lists exactly, and
  * they must stay open — an unknown value is never rejected.
  */
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   ACCESS_CODE_MODES,
   ACCOUNT_EVENT_TYPES,
   ACCOUNT_KEY_CAPABILITIES,
   DIRECTORY_CALL_OUTCOMES,
+  OPEN_HISTORY_RESULTS,
+  OPEN_HISTORY_TYPES,
   CAPABILITIES,
   CHANGE_LOG_TYPES,
   GEOFENCE_MODES,
@@ -16,6 +21,7 @@ import {
   hasCapability,
   NimbioClient,
 } from "../src/index.js";
+import type { OpenHistoryResult, OpenHistoryType } from "../src/index.js";
 import { mockFetch, TEST_KEY } from "./helpers.js";
 
 describe("CAPABILITIES", () => {
@@ -34,11 +40,12 @@ describe("CAPABILITIES", () => {
 });
 
 describe("ACCOUNT_KEY_CAPABILITIES", () => {
-  it("is `open` plus the account-only `directory_call_events`", () => {
-    expect(ACCOUNT_KEY_CAPABILITIES).toEqual(["open", "directory_call_events"]);
+  it("is `open` plus the account-only `directory_call_events` and `open_history`", () => {
+    expect(ACCOUNT_KEY_CAPABILITIES).toEqual(["open", "directory_call_events", "open_history"]);
     expect(Object.isFrozen(ACCOUNT_KEY_CAPABILITIES)).toBe(true);
     expect(CAPABILITIES).toContain("open");
     expect(CAPABILITIES).not.toContain("directory_call_events");
+    expect(CAPABILITIES).not.toContain("open_history");
   });
 
   it("works with hasCapability like any other list", () => {
@@ -147,5 +154,45 @@ describe("KEY_USAGE_REPORT_TYPES", () => {
     expect(Object.isFrozen(KEY_USAGE_REPORT_TYPES)).toBe(true);
     const rule: (typeof KEY_USAGE_REPORT_TYPES)[number] | string = "future_rule";
     expect(KEY_USAGE_REPORT_TYPES).not.toContain(rule);
+  });
+});
+
+describe("OPEN_HISTORY_TYPES / OPEN_HISTORY_RESULTS", () => {
+  it("are the contract's id -> name maps, in id order, plus `unknown`", () => {
+    expect(OPEN_HISTORY_TYPES).toEqual([
+      "open", "do_not_open", "emergency_open", "emergency_fail",
+      "doorbell_or_emergency_prompt", "bluetooth_unlock", "bluetooth_lock",
+      "unlock", "do_not_unlock", "lock", "do_not_lock", "unknown",
+    ]);
+    expect(OPEN_HISTORY_RESULTS).toEqual([
+      "opened", "did_not_open", "locked", "did_not_lock",
+      "fail_open_trying_bluetooth", "fail_lock_trying_bluetooth",
+      "unlock_bluetooth", "lock_bluetooth", "fail_lock_bluetooth",
+      "fail_unlock_bluetooth", "unused_bluetooth", "lock_already_unlocked",
+      "lock_already_locked", "unlocked", "did_not_unlock", "unknown",
+    ]);
+    expect(Object.isFrozen(OPEN_HISTORY_TYPES)).toBe(true);
+    expect(Object.isFrozen(OPEN_HISTORY_RESULTS)).toBe(true);
+    // Every listed name is one the row types autocomplete.
+    const types: readonly OpenHistoryType[] = OPEN_HISTORY_TYPES;
+    const results: readonly OpenHistoryResult[] = OPEN_HISTORY_RESULTS;
+    expect(new Set(types).size).toBe(types.length);
+    expect(new Set(results).size).toBe(results.length);
+  });
+
+  // The two SDKs are peers; a vocabulary must not drift between them. Runs only
+  // where the Python SDK is checked out alongside this repo.
+  const pyConstants = join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../nimbio-python-community-api/src/nimbio_community_api/constants.py",
+  );
+  it.skipIf(!existsSync(pyConstants)).each([
+    ["OPEN_HISTORY_TYPES", OPEN_HISTORY_TYPES],
+    ["OPEN_HISTORY_RESULTS", OPEN_HISTORY_RESULTS],
+  ] as const)("%s matches the Python SDK", (name, values) => {
+    const source = readFileSync(pyConstants, "utf8");
+    const match = new RegExp(`^${name}: Tuple\\[str, \\.\\.\\.\\] = \\((.*?)\\)$`, "ms").exec(source);
+    expect(match, `${name} not found in the Python SDK`).not.toBeNull();
+    expect([...match![1]!.matchAll(/"([^"]+)"/g)].map((m) => m[1])).toEqual([...values]);
   });
 });

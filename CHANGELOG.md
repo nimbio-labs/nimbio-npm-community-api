@@ -22,6 +22,20 @@ adheres to [Semantic Versioning](https://semver.org/).
   `directory_call_events` entry in `ACCOUNT_KEY_CAPABILITIES`, the exported
   `parseAccountEvent`, and the `DirectoryCall*` types. `outcome`, `endedBy` and
   `state` are open string unions.
+- **Account open history.** `account.history({ from, to, keyId, page })` →
+  `OpenHistoryPage` reads `GET /v1/account/history`: opens on every key the
+  account owns, including keys shared from them, newest first, 1000 per page.
+  `account.iterHistory({ from, to, keyId, startPage })` walks `page` while
+  `hasMore` is true, stops on an empty page, and pins the window the first page
+  echoed. Each `AccountOpen` row carries a stable `id` (its log id); a fresh
+  open's `result` is filled in up to ~18s later, so pollers re-read a trailing
+  minute and upsert by `id`. New types `AccountOpen`, `AccountOpenedBy`,
+  `AccountOpenGuestLink` (nullable), `OpenHistoryType` and `OpenHistoryResult`
+  (open string unions), and the frozen `OPEN_HISTORY_TYPES` /
+  `OPEN_HISTORY_RESULTS` (known names, including `unknown`).
+  `open_history` added to `ACCOUNT_KEY_CAPABILITIES`. Errors: 404
+  `key_not_found` / `feature_not_enabled`, 403 `not_account_key` /
+  `oauth_not_permitted`, 400 `invalid_window`, 422 `invalid_datetime`.
 
 ## [0.7.0] - 2026-09-01
 

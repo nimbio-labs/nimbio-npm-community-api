@@ -46,9 +46,10 @@ export const CAPABILITIES = Object.freeze([
 ] as const);
 
 /**
- * Everything an **account-scoped** key can be granted: `open`, plus
- * `directory_call_events` (`account.streamEvents()` /
- * `account.directoryCalls()`) where that feature is enabled for the account.
+ * Everything an **account-scoped** key can be granted: `open` and
+ * `open_history` (`account.history()`), plus `directory_call_events`
+ * (`account.streamEvents()` / `account.directoryCalls()`) where that feature
+ * is enabled for the account.
  *
  * Account keys act on your own keys and latches (`client.account.*`); the
  * community surface is refused with `not_community_key` (403). Branch on this
@@ -62,6 +63,7 @@ export const CAPABILITIES = Object.freeze([
 export const ACCOUNT_KEY_CAPABILITIES = Object.freeze([
   "open",
   "directory_call_events",
+  "open_history",
 ] as const);
 
 /**
@@ -128,6 +130,50 @@ export const DIRECTORY_CALL_OUTCOMES = Object.freeze([
   "opened",
   "answered",
   "missed",
+] as const);
+
+/**
+ * The known `openType` values of an `account.history()` row: the kind of
+ * action, not where the open came from. `unknown` stands in for an id the
+ * server has no name for. Open: a newer server may add one.
+ */
+export const OPEN_HISTORY_TYPES = Object.freeze([
+  "open",
+  "do_not_open",
+  "emergency_open",
+  "emergency_fail",
+  "doorbell_or_emergency_prompt",
+  "bluetooth_unlock",
+  "bluetooth_lock",
+  "unlock",
+  "do_not_unlock",
+  "lock",
+  "do_not_lock",
+  "unknown",
+] as const);
+
+/**
+ * The known `result` values of an `account.history()` row. `unknown` means no
+ * result was recorded (yet: a fresh open's result lands up to ~18s later).
+ * Open, like {@link OPEN_HISTORY_TYPES}.
+ */
+export const OPEN_HISTORY_RESULTS = Object.freeze([
+  "opened",
+  "did_not_open",
+  "locked",
+  "did_not_lock",
+  "fail_open_trying_bluetooth",
+  "fail_lock_trying_bluetooth",
+  "unlock_bluetooth",
+  "lock_bluetooth",
+  "fail_lock_bluetooth",
+  "fail_unlock_bluetooth",
+  "unused_bluetooth",
+  "lock_already_unlocked",
+  "lock_already_locked",
+  "unlocked",
+  "did_not_unlock",
+  "unknown",
 ] as const);
 
 /** An account stream event type. Any string is accepted. */

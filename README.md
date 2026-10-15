@@ -331,8 +331,9 @@ if (!hasCapability(me.key, "hold_opens")) throw new Error("this key cannot hold 
 ```
 
 `CAPABILITIES` is the 22 endpoint families a community-scoped key can be
-granted; `ACCOUNT_KEY_CAPABILITIES` is the account-scoped set — `open`, plus
-`directory_call_events` where that feature is enabled for the account.
+granted; `ACCOUNT_KEY_CAPABILITIES` is the account-scoped set — `open` and
+`open_history`, plus `directory_call_events` where that feature is enabled for
+the account.
 `STREAM_EVENT_TYPES` is the ten event types, and it is one vocabulary rather
 than two: the same catalog a webhook subscription accepts is what
 `community.streamEvents()` filters on. `ACCOUNT_EVENT_TYPES` is the separate
@@ -401,6 +402,33 @@ stream reconnects and resumes like `community.streamEvents()`. A community key
 throws `PermissionDeniedError` (`not_account_key`); an account without the
 feature throws `NotFoundError` (`feature_not_enabled`) — check
 `hasCapability(me.key, "directory_call_events")` first.
+
+### Your open history (account keys)
+
+`client.account.history()` is the app's History tab: every open on a key you
+own, including opens on keys you shared with someone else, filed under *your*
+key, newest first and 1000 per page.
+
+```ts
+for await (const open of client.account.iterHistory({ from: "2026-10-01" })) {
+  const who = open.openedBy.isYou ? "You" : (open.openedBy.name ?? "Someone");
+  console.log(open.id, open.openedAt, open.latch.name, who, open.result);
+}
+```
+
+To keep a local copy current, poll with `from` set about a minute behind the
+newest row you hold and upsert by `id`, which is stable. A fresh open's
+`result` arrives up to ~18s after the open (it reads `"unknown"` until then),
+so a row you already stored can change.
+
+`from`/`to` take a date or an ISO-8601 datetime; omit both for the last 90 days
+(the retention floor), and the page echoes the window used as `dateFrom` /
+`dateTo`. `keyId` narrows to one of your keys (any other throws `NotFoundError`,
+`key_not_found`). `guestLink` is set for a guest-link open, and `openType` /
+`result` are open vocabularies (`OPEN_HISTORY_TYPES` / `OPEN_HISTORY_RESULTS`
+list the known names). A linked-app token throws
+`PermissionDeniedError` (`oauth_not_permitted`), because the rows name other
+people.
 
 ### Bulk writes
 

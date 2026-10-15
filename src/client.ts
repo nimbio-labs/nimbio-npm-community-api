@@ -25,6 +25,7 @@ import type {
 } from "./constants.js";
 import type {
   AccountKey,
+  AccountOpen,
   AccountStreamMessage,
   AccessLogEntry,
   AccessLogPage,
@@ -85,6 +86,7 @@ import type {
   NfcTagPage,
   NfcTagWriteResult,
   NotificationSettings,
+  OpenHistoryPage,
   OpenResult,
   RecurringHoldOpenRemoved,
   RecurringHoldOpenResult,
@@ -502,6 +504,45 @@ export class Account {
       // A cursor that does not advance would re-yield the same page forever.
       if (!page.nextBefore || page.calls.length === 0 || page.nextBefore === before) return;
       before = page.nextBefore;
+    }
+  }
+
+  /**
+   * One page (1000 rows) of opens on your keys, newest first — the app's
+   * History tab, including opens on keys you shared.
+   *
+   * `from`/`to` take a `YYYY-MM-DD` date or an ISO-8601 datetime (naive is
+   * UTC); omit both for the last 90 days. `from` is clamped to the 90-day
+   * retention floor and the page echoes the window it used (`dateFrom` /
+   * `dateTo`). `keyId` narrows to one of your keys; any other id throws
+   * {@link NotFoundError} (`key_not_found`). A bad datetime is a 422
+   * (`invalid_datetime`); a linked-app token throws
+   * {@link PermissionDeniedError} (`oauth_not_permitted`).
+   */
+  history(
+    opts: { from?: string; to?: string; keyId?: string; page?: number } = {},
+  ): Promise<OpenHistoryPage> {
+    return this.client.request(endpoints.accountHistory(opts));
+  }
+
+  /**
+   * Yield every open in the window, newest first, walking pages until
+   * `hasMore` is false or a page comes back empty.
+   */
+  async *iterHistory(
+    opts: { from?: string; to?: string; keyId?: string; startPage?: number } = {},
+  ): AsyncGenerator<AccountOpen> {
+    let { from, to } = opts;
+    let page = opts.startPage ?? 0;
+    for (;;) {
+      const result = await this.history({ from, to, keyId: opts.keyId, page });
+      yield* result.opens;
+      if (!result.hasMore || result.opens.length === 0) return;
+      // Pin the window the first page used: a defaulted `to` of now would
+      // otherwise slide between pages and shift rows across the boundary.
+      from = from ?? result.dateFrom ?? undefined;
+      to = to ?? result.dateTo ?? undefined;
+      page += 1;
     }
   }
 }

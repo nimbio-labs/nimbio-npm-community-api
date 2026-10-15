@@ -988,6 +988,126 @@ export function parseDirectoryCallPage(raw: unknown): DirectoryCallPage {
   };
 }
 
+// --------------------------------------------------------------------------- //
+// Account open history
+// --------------------------------------------------------------------------- //
+
+/**
+ * The kind of action logged (not where it came from): an ordinary open is
+ * `"open"`. `"unknown"` for an id the server has no name for. Open: a newer
+ * server may add names.
+ */
+export type OpenHistoryType =
+  | "open" | "do_not_open" | "emergency_open" | "emergency_fail"
+  | "doorbell_or_emergency_prompt" | "bluetooth_unlock" | "bluetooth_lock"
+  | "unlock" | "do_not_unlock" | "lock" | "do_not_lock" | "unknown"
+  | (string & Record<never, never>);
+
+/**
+ * What the action did, e.g. `"opened"` or `"did_not_open"`. `"unknown"` when
+ * no result was recorded. Open: a newer server may add names.
+ */
+export type OpenHistoryResult =
+  | "opened" | "did_not_open" | "locked" | "did_not_lock"
+  | "fail_open_trying_bluetooth" | "fail_lock_trying_bluetooth"
+  | "unlock_bluetooth" | "lock_bluetooth" | "fail_lock_bluetooth"
+  | "fail_unlock_bluetooth" | "unused_bluetooth" | "lock_already_unlocked"
+  | "lock_already_locked" | "unlocked" | "did_not_unlock" | "unknown"
+  | (string & Record<never, never>);
+
+/**
+ * Who opened. `isYou` is true when your own key did; otherwise `name` is the
+ * opener as the app shows it, or the guest link's label for a guest-link open.
+ * No contact details are ever included.
+ */
+export interface AccountOpenedBy {
+  isYou: boolean;
+  name: string | null;
+}
+
+/** The guest link an open was made through. */
+export interface AccountOpenGuestLink {
+  id: number | null;
+  label: string | null;
+}
+
+/**
+ * One row of `account.history()`: an open on one of your keys, including opens
+ * on keys you shared with someone else.
+ */
+export interface AccountOpen {
+  /**
+   * The open's log id: stable, and unique across your history. A fresh open is
+   * logged before the gate answers and its `result` is filled in up to ~18s
+   * later, so to poll, re-read a trailing minute and upsert by `id` rather than
+   * moving `from` past rows you have already seen.
+   */
+  id: number | null;
+  /** In the latch's local offset, as the app shows it. */
+  openedAt: string | null;
+  /**
+   * The key on **your** account the open is filed under: for an open on a key
+   * you shared, your key, not the shared copy that physically opened.
+   */
+  key: { id: string | null; name: string | null };
+  latch: { id: string | null; name: string | null };
+  openedBy: AccountOpenedBy;
+  /** `null` unless the open was made through a guest link. */
+  guestLink: AccountOpenGuestLink | null;
+  openType: OpenHistoryType | null;
+  result: OpenHistoryResult | null;
+  /** The raw ids behind `openType` / `result`. */
+  openTypeId: number | null;
+  resultId: number | null;
+  raw: RawPayload;
+}
+
+/** One page (up to 1000 rows) of `account.history()`, newest first. */
+export interface OpenHistoryPage {
+  opens: AccountOpen[];
+  page: number | null;
+  /** Ask for `page + 1` while this is true. */
+  hasMore: boolean;
+  /** The effective window; `dateFrom` is clamped to the 90-day retention floor. */
+  dateFrom: string | null;
+  dateTo: string | null;
+  raw: RawPayload;
+}
+
+export function parseAccountOpen(raw: unknown): AccountOpen {
+  const d = asObject(raw);
+  const key = asObject(d.key);
+  const latch = asObject(d.latch);
+  const openedBy = asObject(d.opened_by);
+  const guestLink =
+    d.guest_link && typeof d.guest_link === "object" ? asObject(d.guest_link) : null;
+  return {
+    id: num(d.id),
+    openedAt: str(d.opened_at),
+    key: { id: str(key.id), name: str(key.name) },
+    latch: { id: str(latch.id), name: str(latch.name) },
+    openedBy: { isYou: bool(openedBy.is_you), name: str(openedBy.name) },
+    guestLink: guestLink && { id: num(guestLink.id), label: str(guestLink.label) },
+    openType: str(d.open_type),
+    result: str(d.result),
+    openTypeId: num(d.open_type_id),
+    resultId: num(d.result_id),
+    raw: d,
+  };
+}
+
+export function parseOpenHistoryPage(raw: unknown): OpenHistoryPage {
+  const d = asObject(raw);
+  return {
+    opens: arr(d.opens).map(parseAccountOpen),
+    page: num(d.page),
+    hasMore: bool(d.has_more),
+    dateFrom: str(d.from),
+    dateTo: str(d.to),
+    raw: d,
+  };
+}
+
 /**
  * Parse an account event envelope (`{event, id, account_id, occurred_at,
  * data}`) — the SSE `data:` line of `account.streamEvents()`. Returns `null`

@@ -521,6 +521,21 @@ export const endpoints = {
     };
   },
 
+  accountHistory(
+    opts: { from?: string; to?: string; keyId?: string; page?: number } = {},
+  ): EndpointSpec<models.OpenHistoryPage> {
+    const params: Record<string, string | number> = { page: opts.page ?? 0 };
+    if (opts.from != null) params.from = opts.from;
+    if (opts.to != null) params.to = opts.to;
+    if (opts.keyId != null) params.key_id = opts.keyId;
+    return {
+      method: "GET",
+      path: "/v1/account/history",
+      params,
+      parse: models.parseOpenHistoryPage,
+    };
+  },
+
   info(): EndpointSpec<models.CommunityInfo> {
     return {
       method: "GET",
