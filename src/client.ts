@@ -18,12 +18,14 @@ import * as errors from "./errors.js";
 import * as sse from "./sse.js";
 import type {
   AccessCodeMode,
+  AccountEventType,
   ChangeLogType,
   GeofenceMode,
   GuestLinkType,
 } from "./constants.js";
 import type {
   AccountKey,
+  AccountStreamMessage,
   AccessLogEntry,
   AccessLogPage,
   AccessCodes,
@@ -44,6 +46,8 @@ import type {
   CommunitySettings,
   CommunitySettingsInput,
   DeliveryReplayResult,
+  DirectoryCall,
+  DirectoryCallPage,
   GateStatus,
   GateStatusLogEntry,
   GateStatusLogPage,
@@ -97,6 +101,7 @@ import type {
   WebhookWriteResult,
   WriteResult,
 } from "./models.js";
+import { parseAccountEvent } from "./models.js";
 
 /** 30-day member-access-log window. */
 export type MemberAccessLogWindow = "last_30" | "30_60" | "60_90";
@@ -294,6 +299,93 @@ export class NimbioClient extends BaseClient {
     throw new errors.APIConnectionError("Unexpected stream response");
   }
 
+  /**
+   * @internal The SSE read loop behind every `streamEvents()`: connect, parse
+   * frames, and on a dropped connection back off and resume from the last
+   * seen id. Community and account streams differ only in `path`.
+   */
+  async *streamMessages(
+    path: string,
+    opts: {
+      events?: readonly string[];
+      lastEventId?: string;
+      reconnect?: boolean;
+      signal?: AbortSignal;
+    } = {},
+  ): AsyncGenerator<StreamMessage, void, undefined> {
+    const { events, lastEventId, reconnect = true, signal } = opts;
+    let cursor: string | null = lastEventId ?? null;
+    let attempt = 0;
+
+    for (;;) {
+      if (signal?.aborted) return;
+      let resp: Response;
+      try {
+        resp = await this.streamFetch(
+          path,
+          sse.streamParams(events, cursor),
+          signal,
+        );
+      } catch (e) {
+        if (signal?.aborted) return;
+        if (!reconnect) throw e;
+        await sleep(sse.backoffDelay(attempt));
+        attempt += 1;
+        continue;
+      }
+      if (resp.status !== 200) {
+        await this.throwStreamError(resp);
+      }
+
+      if (resp.body) {
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        const parser = new sse.SSEParser();
+        let buffer = "";
+        try {
+          for (;;) {
+            const { done, value } = await readWithIdleTimeout(reader);
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            let nl: number;
+            while ((nl = buffer.indexOf("\n")) >= 0) {
+              let line = buffer.slice(0, nl);
+              buffer = buffer.slice(nl + 1);
+              if (line.endsWith("\r")) line = line.slice(0, -1);
+              const frame = parser.feed(line);
+              if (!frame) continue;
+              const model = sse.frameToModel(frame);
+              if (!model) continue;
+              attempt = 0;
+              cursor = model.kind === "reset" ? null : model.id;
+              yield model;
+            }
+          }
+        } catch (e) {
+          if (signal?.aborted) return;
+          if (!reconnect) {
+            if (e instanceof errors.NimbioError) throw e;
+            const message =
+              e instanceof Error && e.message ? e.message : "Connection error";
+            throw new errors.APIConnectionError(message, { cause: e });
+          }
+        } finally {
+          try {
+            await reader.cancel();
+          } catch {
+            /* stream already closed */
+          }
+        }
+      }
+
+      // Stream ended (server close / deploy / slow-client drop) or a
+      // transport error with reconnect enabled: back off and resume.
+      if (signal?.aborted || !reconnect) return;
+      await sleep(sse.backoffDelay(attempt));
+      attempt += 1;
+    }
+  }
+
   // -- lifecycle ----------------------------------------------------------- //
 
   /**
@@ -349,6 +441,68 @@ export class Account {
     return this.client.request(
       endpoints.accountOpen(keyId, latchId, opts.note, opts.idempotencyKey),
     );
+  }
+
+  /**
+   * Iterate your account's live events over SSE — today, directory calls:
+   * `directory_call.ringing` when a guest calls you (or your home) from a
+   * GuestView directory, and `directory_call.ended` once per call when it ends.
+   *
+   * Yields `{ kind: "event", id, type, data, payload, parsed }` per event —
+   * `parsed` is the typed {@link AccountEvent} (switch on `parsed.event`), or
+   * `null` for an event type this client predates — and `{ kind: "reset",
+   * reason }` when the server cannot replay a reconnect gap; catch up with
+   * {@link directoryCalls}, then keep iterating.
+   *
+   * Reconnect, resume (`lastEventId`), `events` filtering and abort behave
+   * exactly as on `community.streamEvents()`. Requires an account key with the
+   * `directory_call_events` capability: a community key throws
+   * {@link PermissionDeniedError} (`not_account_key`), and an account the
+   * feature is not enabled for throws {@link NotFoundError}
+   * (`feature_not_enabled`).
+   */
+  async *streamEvents(
+    opts: {
+      events?: readonly AccountEventType[];
+      lastEventId?: string;
+      reconnect?: boolean;
+      signal?: AbortSignal;
+    } = {},
+  ): AsyncGenerator<AccountStreamMessage, void, undefined> {
+    for await (const msg of this.client.streamMessages(sse.ACCOUNT_STREAM_PATH, opts)) {
+      if (msg.kind === "reset") {
+        yield msg;
+      } else {
+        // The envelope names its own type; the SSE `event:` line is the fallback.
+        yield { ...msg, parsed: parseAccountEvent({ event: msg.type, ...msg.data }) };
+      }
+    }
+  }
+
+  /**
+   * One page of the directory calls that rang you, newest first. Pass the
+   * page's `nextBefore` as `before` to read the next (older) page. `limit` is
+   * 1-100 (server default 20). Same key and feature requirements as
+   * {@link streamEvents}.
+   */
+  directoryCalls(
+    opts: { limit?: number; before?: string } = {},
+  ): Promise<DirectoryCallPage> {
+    return this.client.request(endpoints.accountDirectoryCalls(opts.limit, opts.before));
+  }
+
+  /** Yield every directory call, newest first, following `nextBefore` to the end. */
+  async *iterDirectoryCalls(
+    opts: { limit?: number; before?: string } = {},
+  ): AsyncGenerator<DirectoryCall> {
+    let before = opts.before;
+    for (;;) {
+      const page = await this.directoryCalls({ limit: opts.limit, before });
+      yield* page.calls;
+      // A cursor that does not advance would re-yield the same page forever.
+      if (!page.nextBefore || page.calls.length === 0 || page.nextBefore === before) return;
+      before = page.nextBefore;
+    }
   }
 }
 
@@ -2125,7 +2279,7 @@ export class Community {
    * one per-minute request and is monthly-quota-exempt; delivered events are
    * free.
    */
-  async *streamEvents(
+  streamEvents(
     opts: {
       events?: readonly string[];
       lastEventId?: string;
@@ -2133,77 +2287,7 @@ export class Community {
       signal?: AbortSignal;
     } = {},
   ): AsyncGenerator<StreamMessage, void, undefined> {
-    const { events, lastEventId, reconnect = true, signal } = opts;
-    let cursor: string | null = lastEventId ?? null;
-    let attempt = 0;
-
-    for (;;) {
-      if (signal?.aborted) return;
-      let resp: Response;
-      try {
-        resp = await this.client.streamFetch(
-          sse.STREAM_PATH,
-          sse.streamParams(events, cursor),
-          signal,
-        );
-      } catch (e) {
-        if (signal?.aborted) return;
-        if (!reconnect) throw e;
-        await sleep(sse.backoffDelay(attempt));
-        attempt += 1;
-        continue;
-      }
-      if (resp.status !== 200) {
-        await this.client.throwStreamError(resp);
-      }
-
-      if (resp.body) {
-        const reader = resp.body.getReader();
-        const decoder = new TextDecoder();
-        const parser = new sse.SSEParser();
-        let buffer = "";
-        try {
-          for (;;) {
-            const { done, value } = await readWithIdleTimeout(reader);
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            let nl: number;
-            while ((nl = buffer.indexOf("\n")) >= 0) {
-              let line = buffer.slice(0, nl);
-              buffer = buffer.slice(nl + 1);
-              if (line.endsWith("\r")) line = line.slice(0, -1);
-              const frame = parser.feed(line);
-              if (!frame) continue;
-              const model = sse.frameToModel(frame);
-              if (!model) continue;
-              attempt = 0;
-              cursor = model.kind === "reset" ? null : model.id;
-              yield model;
-            }
-          }
-        } catch (e) {
-          if (signal?.aborted) return;
-          if (!reconnect) {
-            if (e instanceof errors.NimbioError) throw e;
-            const message =
-              e instanceof Error && e.message ? e.message : "Connection error";
-            throw new errors.APIConnectionError(message, { cause: e });
-          }
-        } finally {
-          try {
-            await reader.cancel();
-          } catch {
-            /* stream already closed */
-          }
-        }
-      }
-
-      // Stream ended (server close / deploy / slow-client drop) or a
-      // transport error with reconnect enabled: back off and resume.
-      if (signal?.aborted || !reconnect) return;
-      await sleep(sse.backoffDelay(attempt));
-      attempt += 1;
-    }
+    return this.client.streamMessages(sse.STREAM_PATH, opts);
   }
 
   // -- logs ---------------------------------------------------------------- //

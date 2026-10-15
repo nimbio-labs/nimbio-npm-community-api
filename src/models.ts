@@ -775,6 +775,243 @@ export interface StreamReset {
 export type StreamMessage = StreamEvent | StreamReset;
 
 // --------------------------------------------------------------------------- //
+// Account events (directory calls)
+// --------------------------------------------------------------------------- //
+
+/**
+ * How a directory call ended for everyone: `opened` (a gate opened on it),
+ * `answered` (claimed but not opened) or `missed`. An open vocabulary — a
+ * value this client predates is passed through, never rejected.
+ */
+export type DirectoryCallOutcome =
+  | "opened"
+  | "answered"
+  | "missed"
+  | (string & Record<never, never>);
+
+/** Who ended the call: `caller`, `callee`, or `timeout` (the server's sweeper). */
+export type DirectoryCallEndedBy =
+  | "caller"
+  | "callee"
+  | "timeout"
+  | (string & Record<never, never>);
+
+/** A history row's lifecycle: `ringing`, `answered` (claimed, still live) or `ended`. */
+export type DirectoryCallState =
+  | "ringing"
+  | "answered"
+  | "ended"
+  | (string & Record<never, never>);
+
+/**
+ * The guest who placed the call. `null` on the call means an anonymous guest;
+ * a signed-in guest gives their name, either half of which may be missing.
+ * The caller's account id is never exposed.
+ */
+export interface DirectoryCallCaller {
+  signedIn: true;
+  firstName: string | null;
+  lastName: string | null;
+}
+
+/** Who was called: one member, or a home (every member of it rings). */
+export interface DirectoryCallCalled {
+  /** `"member"` | `"home"`. */
+  type: string | null;
+  /** Set for a home call. */
+  homeId: number | null;
+  homeName: string | null;
+}
+
+/** Fields every directory-call payload and history row shares. */
+export interface DirectoryCallBase {
+  directoryCallId: string | null;
+  placedAt: string | null;
+  /** `placedAt` + 9 minutes: after this the call can no longer be answered. */
+  answerWindowEndsAt: string | null;
+  community: { id: number | null; name: string | null } | null;
+  /** `null` when the call has no latch. */
+  latch: { id: string | null; name: string | null } | null;
+  called: DirectoryCallCalled;
+  /** `"nfc"` (a tag scan) | `"link"`. */
+  arrivedVia: string | null;
+  /** `null` for an anonymous guest. */
+  caller: DirectoryCallCaller | null;
+}
+
+/** How a call ended, from your (the recipient's) point of view. */
+export interface DirectoryCallEndFields {
+  /** The **call's** outcome — the same for every recipient. */
+  outcome: DirectoryCallOutcome | null;
+  endedAt: string | null;
+  endedBy: DirectoryCallEndedBy | null;
+  answeredAt: string | null;
+  answeredByYou: boolean;
+  answeredByFirstName: string | null;
+  /** You declined; the call still rang for anyone else it was ringing. */
+  declinedByYou: boolean;
+  openedByYou: boolean;
+}
+
+/** `data` of a `directory_call.ringing` event. */
+export interface DirectoryCallRinging extends DirectoryCallBase {
+  raw: RawPayload;
+}
+
+/** `data` of a `directory_call.ended` event. */
+export interface DirectoryCallEnded extends DirectoryCallEndFields {
+  directoryCallId: string | null;
+  raw: RawPayload;
+}
+
+/**
+ * One row of `account.directoryCalls()`: the ringing fields plus how it went.
+ * `outcome` and the `ended*` fields are null while the call is live.
+ */
+export interface DirectoryCall extends DirectoryCallBase, DirectoryCallEndFields {
+  state: DirectoryCallState | null;
+  raw: RawPayload;
+}
+
+/** One page of `account.directoryCalls()`, newest first. */
+export interface DirectoryCallPage {
+  calls: DirectoryCall[];
+  /** Pass as `before` for the next (older) page; null on the last page. */
+  nextBefore: string | null;
+  raw: RawPayload;
+}
+
+/** Envelope fields every account event carries. */
+interface AccountEventEnvelope {
+  id: string | null;
+  accountId: string | null;
+  occurredAt: string | null;
+  raw: RawPayload;
+}
+
+export interface DirectoryCallRingingEvent extends AccountEventEnvelope {
+  event: "directory_call.ringing";
+  data: DirectoryCallRinging;
+}
+
+export interface DirectoryCallEndedEvent extends AccountEventEnvelope {
+  event: "directory_call.ended";
+  data: DirectoryCallEnded;
+}
+
+/**
+ * A typed account event, discriminated on `event`. Closed on purpose so
+ * `switch (e.event)` narrows; an event type this client predates parses to
+ * `null` instead (see {@link AccountStreamEvent.parsed}).
+ */
+export type AccountEvent = DirectoryCallRingingEvent | DirectoryCallEndedEvent;
+
+/** A stream event from `account.streamEvents()`: the raw frame plus its typed form. */
+export interface AccountStreamEvent extends StreamEvent {
+  /** The typed event, or `null` for an event type this client predates. */
+  parsed: AccountEvent | null;
+}
+
+/** Union yielded by `account.streamEvents()`. */
+export type AccountStreamMessage = AccountStreamEvent | StreamReset;
+
+function parseCaller(v: unknown): DirectoryCallCaller | null {
+  if (v === null || typeof v !== "object" || Array.isArray(v)) return null;
+  const d = v as RawPayload;
+  return { signedIn: true, firstName: str(d.first_name), lastName: str(d.last_name) };
+}
+
+function parseDirectoryCallBase(d: RawPayload): DirectoryCallBase {
+  const community =
+    d.community && typeof d.community === "object" ? asObject(d.community) : null;
+  const latch = d.latch && typeof d.latch === "object" ? asObject(d.latch) : null;
+  const called = asObject(d.called);
+  return {
+    directoryCallId: str(d.directory_call_id),
+    placedAt: str(d.placed_at),
+    answerWindowEndsAt: str(d.answer_window_ends_at),
+    community: community && { id: num(community.id), name: str(community.name) },
+    latch: latch && { id: str(latch.id), name: str(latch.name) },
+    called: {
+      type: str(called.type),
+      homeId: num(called.home_id),
+      homeName: str(called.home_name),
+    },
+    arrivedVia: str(d.arrived_via),
+    caller: parseCaller(d.caller),
+  };
+}
+
+function parseDirectoryCallEndFields(d: RawPayload): DirectoryCallEndFields {
+  return {
+    outcome: str(d.outcome),
+    endedAt: str(d.ended_at),
+    endedBy: str(d.ended_by),
+    answeredAt: str(d.answered_at),
+    answeredByYou: bool(d.answered_by_you),
+    answeredByFirstName: str(d.answered_by_first_name),
+    declinedByYou: bool(d.declined_by_you),
+    openedByYou: bool(d.opened_by_you),
+  };
+}
+
+export function parseDirectoryCallRinging(raw: unknown): DirectoryCallRinging {
+  const d = asObject(raw);
+  return { ...parseDirectoryCallBase(d), raw: d };
+}
+
+export function parseDirectoryCallEnded(raw: unknown): DirectoryCallEnded {
+  const d = asObject(raw);
+  return {
+    directoryCallId: str(d.directory_call_id),
+    ...parseDirectoryCallEndFields(d),
+    raw: d,
+  };
+}
+
+export function parseDirectoryCall(raw: unknown): DirectoryCall {
+  const d = asObject(raw);
+  return {
+    ...parseDirectoryCallBase(d),
+    ...parseDirectoryCallEndFields(d),
+    state: str(d.state),
+    raw: d,
+  };
+}
+
+export function parseDirectoryCallPage(raw: unknown): DirectoryCallPage {
+  const d = asObject(raw);
+  return {
+    calls: arr(d.calls).map(parseDirectoryCall),
+    nextBefore: str(d.next_before),
+    raw: d,
+  };
+}
+
+/**
+ * Parse an account event envelope (`{event, id, account_id, occurred_at,
+ * data}`) — the SSE `data:` line of `account.streamEvents()`. Returns `null`
+ * for an event type this client does not know.
+ */
+export function parseAccountEvent(raw: unknown): AccountEvent | null {
+  const d = asObject(raw);
+  const envelope = {
+    id: str(d.id),
+    accountId: str(d.account_id),
+    occurredAt: str(d.occurred_at),
+    raw: d,
+  };
+  switch (d.event) {
+    case "directory_call.ringing":
+      return { ...envelope, event: d.event, data: parseDirectoryCallRinging(d.data) };
+    case "directory_call.ended":
+      return { ...envelope, event: d.event, data: parseDirectoryCallEnded(d.data) };
+    default:
+      return null;
+  }
+}
+
+// --------------------------------------------------------------------------- //
 // Key access schedules
 // --------------------------------------------------------------------------- //
 

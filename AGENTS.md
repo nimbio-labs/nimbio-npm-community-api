@@ -232,7 +232,26 @@ for await (const msg of client.community.streamEvents({
   if (msg.kind === "reset") { /* gap not replayable: re-seed via gateStatus()/holdOpens() */ }
   else { msg.id; msg.type; msg.payload; }               // payload = event-specific fields
 }
+
+// Account events (ACCOUNT key + `directory_call_events` capability):
+// GuestView directory calls that ring YOU
+for await (const msg of client.account.streamEvents({ signal })) {
+  if (msg.kind === "reset") { /* gap: catch up via account.directoryCalls() */ continue; }
+  switch (msg.parsed?.event) {                          // parsed: null = unknown type
+    case "directory_call.ringing": msg.parsed.data.caller; break; // null = anonymous guest
+    case "directory_call.ended":   msg.parsed.data.outcome; break; // open vocabulary
+  }
+}
+await client.account.directoryCalls({ limit: 20, before }); // -> DirectoryCallPage (.calls, .nextBefore)
+for await (const call of client.account.iterDirectoryCalls()) { /* newest first */ }
 ```
+
+Both stream methods share one SSE loop (`NimbioClient.streamMessages`).
+Account-side errors: a community key gets `PermissionDeniedError`
+`not_account_key`; an account the feature is not enabled for gets
+`NotFoundError` `feature_not_enabled`. `outcome` is the **call's** outcome
+(same for every recipient); "you declined" is `declinedByYou`. The caller's
+account id is never exposed.
 
 `streamEvents()` iterates forever by default (auto-reconnect with backoff,
 resuming from the last seen event id); pass `reconnect: false` to consume one
@@ -269,9 +288,12 @@ the API validates both against exactly those values, so `GeofenceMode` and
 422. `community.map()` echoes the server's own mode list as `geofenceModes`.
 
 `CAPABILITIES` is the 22 endpoint families a community-scoped key can carry;
-`ACCOUNT_KEY_CAPABILITIES` is what an account-scoped key gets — `open`, and
-nothing else. `STREAM_EVENT_TYPES` is the ten event types, one vocabulary used
-by both webhook subscriptions and `streamEvents()`.
+`ACCOUNT_KEY_CAPABILITIES` is what an account-scoped key gets — `open`, plus
+`directory_call_events` where that feature is enabled for the account.
+`STREAM_EVENT_TYPES` is the ten event types, one vocabulary used by both webhook
+subscriptions and `community.streamEvents()`. `ACCOUNT_EVENT_TYPES`
+(`directory_call.ringing`, `directory_call.ended`) is the separate catalog
+`account.streamEvents()` filters on; no webhook carries those.
 
 All of these are **open** vocabularies: the server may add to any of them and
 nothing here rejects an unknown value. `community.webhookEventTypes()` is the

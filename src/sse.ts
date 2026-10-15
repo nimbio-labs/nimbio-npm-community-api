@@ -10,6 +10,8 @@
 import type { StreamEvent, StreamReset } from "./models.js";
 
 export const STREAM_PATH = "/v1/events/stream";
+/** The account-scoped stream (account keys only): directory calls ringing you. */
+export const ACCOUNT_STREAM_PATH = "/v1/account/events/stream";
 
 /** The server heartbeats every ~25s; three missed beats = dead connection. */
 export const STREAM_READ_TIMEOUT_SECONDS = 90;

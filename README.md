@@ -331,10 +331,12 @@ if (!hasCapability(me.key, "hold_opens")) throw new Error("this key cannot hold 
 ```
 
 `CAPABILITIES` is the 22 endpoint families a community-scoped key can be
-granted; `ACCOUNT_KEY_CAPABILITIES` is the account-scoped set — `open`, and
-nothing else. `STREAM_EVENT_TYPES` is the ten event types, and it is one
-vocabulary rather than two: the same catalog a webhook subscription accepts is
-what `streamEvents()` filters on.
+granted; `ACCOUNT_KEY_CAPABILITIES` is the account-scoped set — `open`, plus
+`directory_call_events` where that feature is enabled for the account.
+`STREAM_EVENT_TYPES` is the ten event types, and it is one vocabulary rather
+than two: the same catalog a webhook subscription accepts is what
+`community.streamEvents()` filters on. `ACCOUNT_EVENT_TYPES` is the separate
+catalog for `account.streamEvents()` (see below).
 
 `GUEST_LINK_TYPES` is `"event"` and `"limited_use"`, and `GUEST_LINK_STATES`
 the six states a link can report (`active`, `upcoming`, `expired`, `spent`,
@@ -359,6 +361,46 @@ any time, and nothing in this client rejects a value it does not recognize.
 `community.webhookEventTypes()` is the authoritative list at runtime — the
 constant is a convenience snapshot for autocomplete and typo-avoidance, and can
 lag a newer server.
+
+### Directory calls that ring you (account keys)
+
+With an **account-scoped** key, `client.account` can listen for GuestView
+directory calls placed to you or your home — useful for a doorbell light, a
+desk notification, or an assistant that tells you who is at the gate.
+
+```ts
+const controller = new AbortController();
+
+for await (const msg of client.account.streamEvents({ signal: controller.signal })) {
+  if (msg.kind === "reset") {
+    // Missed events could not be replayed: catch up from the history.
+    const { calls } = await client.account.directoryCalls({ limit: 5 });
+    continue;
+  }
+  const event = msg.parsed; // null for an event type this client predates
+  if (event?.event === "directory_call.ringing") {
+    const who = event.data.caller
+      ? `${event.data.caller.firstName ?? ""} ${event.data.caller.lastName ?? ""}`.trim()
+      : "A guest";
+    console.log(`${who} is calling at ${event.data.latch?.name ?? event.data.community?.name}`);
+  } else if (event?.event === "directory_call.ended") {
+    console.log(`Call ${event.data.outcome}`); // "opened" | "answered" | "missed" | newer values
+  }
+}
+
+// History, newest first; follow nextBefore for older pages
+for await (const call of client.account.iterDirectoryCalls()) {
+  console.log(call.placedAt, call.state, call.outcome, call.declinedByYou);
+}
+```
+
+`caller` is `null` for an anonymous guest; a signed-in guest gives a name, either
+half of which may be null. `outcome` is the call's outcome for everyone it rang
+(`declinedByYou` says you declined), and is null while the call is live. The
+stream reconnects and resumes like `community.streamEvents()`. A community key
+throws `PermissionDeniedError` (`not_account_key`); an account without the
+feature throws `NotFoundError` (`feature_not_enabled`) — check
+`hasCapability(me.key, "directory_call_events")` first.
 
 ### Bulk writes
 

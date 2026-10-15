@@ -5,7 +5,9 @@
 import { describe, expect, it } from "vitest";
 import {
   ACCESS_CODE_MODES,
+  ACCOUNT_EVENT_TYPES,
   ACCOUNT_KEY_CAPABILITIES,
+  DIRECTORY_CALL_OUTCOMES,
   CAPABILITIES,
   CHANGE_LOG_TYPES,
   GEOFENCE_MODES,
@@ -32,16 +34,16 @@ describe("CAPABILITIES", () => {
 });
 
 describe("ACCOUNT_KEY_CAPABILITIES", () => {
-  it("is just `open`, and a subset of the community set", () => {
-    expect(ACCOUNT_KEY_CAPABILITIES).toEqual(["open"]);
+  it("is `open` plus the account-only `directory_call_events`", () => {
+    expect(ACCOUNT_KEY_CAPABILITIES).toEqual(["open", "directory_call_events"]);
     expect(Object.isFrozen(ACCOUNT_KEY_CAPABILITIES)).toBe(true);
-    for (const cap of ACCOUNT_KEY_CAPABILITIES) {
-      expect(CAPABILITIES).toContain(cap);
-    }
+    expect(CAPABILITIES).toContain("open");
+    expect(CAPABILITIES).not.toContain("directory_call_events");
   });
 
   it("works with hasCapability like any other list", () => {
     expect(hasCapability(ACCOUNT_KEY_CAPABILITIES, "open")).toBe(true);
+    expect(hasCapability(ACCOUNT_KEY_CAPABILITIES, "directory_call_events")).toBe(true);
     expect(hasCapability(ACCOUNT_KEY_CAPABILITIES, "webhooks")).toBe(false);
   });
 });
@@ -55,6 +57,21 @@ describe("STREAM_EVENT_TYPES", () => {
     ]);
     expect(STREAM_EVENT_TYPES).toHaveLength(10);
     expect(Object.isFrozen(STREAM_EVENT_TYPES)).toBe(true);
+  });
+});
+
+describe("ACCOUNT_EVENT_TYPES", () => {
+  it("is the account stream's two directory-call events, apart from the community catalog", () => {
+    expect(ACCOUNT_EVENT_TYPES).toEqual(["directory_call.ringing", "directory_call.ended"]);
+    expect(Object.isFrozen(ACCOUNT_EVENT_TYPES)).toBe(true);
+    for (const t of ACCOUNT_EVENT_TYPES) expect(STREAM_EVENT_TYPES).not.toContain(t);
+  });
+});
+
+describe("DIRECTORY_CALL_OUTCOMES", () => {
+  it("is the three known call outcomes", () => {
+    expect(DIRECTORY_CALL_OUTCOMES).toEqual(["opened", "answered", "missed"]);
+    expect(Object.isFrozen(DIRECTORY_CALL_OUTCOMES)).toBe(true);
   });
 });
 

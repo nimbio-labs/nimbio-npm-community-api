@@ -11,6 +11,17 @@ adheres to [Semantic Versioning](https://semver.org/).
   `X-Nimbio-Integration` and appends the token to the `User-Agent` on every
   request, so gate opens are attributed to the product built on the SDK.
   Malformed values throw `TypeError`; unset, the requests are unchanged.
+- **Account events — directory calls.** `account.streamEvents({ events,
+  lastEventId, reconnect, signal })` streams `GET /v1/account/events/stream`
+  (`directory_call.ringing`, `directory_call.ended`), sharing the community
+  stream's SSE loop (reconnect, resume, `stream.reset`). Each event also carries
+  `parsed`, a typed `AccountEvent` union discriminated on `event` (`null` for an
+  unknown type). `account.directoryCalls({ limit, before })` →
+  `DirectoryCallPage` and `account.iterDirectoryCalls()` wrap
+  `GET /v1/account/directory-calls`. New `ACCOUNT_EVENT_TYPES`, `DIRECTORY_CALL_OUTCOMES`, the
+  `directory_call_events` entry in `ACCOUNT_KEY_CAPABILITIES`, the exported
+  `parseAccountEvent`, and the `DirectoryCall*` types. `outcome`, `endedBy` and
+  `state` are open string unions.
 
 ## [0.7.0] - 2026-09-01
 

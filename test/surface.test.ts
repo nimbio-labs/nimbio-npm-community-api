@@ -25,7 +25,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { endpoints } from "../src/base.js";
 import type { EndpointSpec } from "../src/base.js";
-import { STREAM_PATH } from "../src/sse.js";
+import { ACCOUNT_STREAM_PATH, STREAM_PATH } from "../src/sse.js";
 import { VERSION } from "../src/version.js";
 
 const SURFACE_PATH = join(
@@ -115,7 +115,7 @@ function describeEndpoint(name: string, fn: Builder): SurfaceEndpoint {
   );
 }
 
-/** Build the whole surface from the registry, plus the SSE stream. */
+/** Build the whole surface from the registry, plus the two SSE streams. */
 export function buildSurface(): Surface {
   const built = Object.entries(endpoints).map(([name, fn]) =>
     describeEndpoint(name, fn as unknown as Builder),
@@ -130,6 +130,8 @@ export function buildSurface(): Surface {
   // amount of work could close. This is not a stray entry — do not delete it.
   // The path is imported, never retyped, so moving STREAM_PATH moves this too.
   built.push({ method: "GET", path: STREAM_PATH, builder: "stream" });
+  // Same reasoning for the account-scoped stream (`account.streamEvents`).
+  built.push({ method: "GET", path: ACCOUNT_STREAM_PATH, builder: "accountStream" });
 
   // Plain code-point ordering, not localeCompare: it must not depend on the
   // host's ICU data, and it has to agree with the Python sibling's `sorted()`.
@@ -156,15 +158,22 @@ describe("surface.json", () => {
     expect(readFileSync(SURFACE_PATH, "utf8")).toBe(generated);
   });
 
-  it("describes every builder in the registry exactly once, plus the stream", () => {
+  it("describes every builder in the registry exactly once, plus the streams", () => {
     const surface = buildSurface();
     const names = surface.endpoints.map((e) => e.builder);
     expect(new Set(names).size).toBe(names.length);
-    expect(names.sort()).toEqual([...Object.keys(endpoints), "stream"].sort());
+    expect(names.sort()).toEqual(
+      [...Object.keys(endpoints), "stream", "accountStream"].sort(),
+    );
   });
 
-  it("takes the stream path from src/sse.ts rather than a literal", () => {
-    const stream = buildSurface().endpoints.find((e) => e.builder === "stream");
-    expect(stream).toEqual({ method: "GET", path: STREAM_PATH, builder: "stream" });
+  it("takes the stream paths from src/sse.ts rather than literals", () => {
+    const find = (b: string) => buildSurface().endpoints.find((e) => e.builder === b);
+    expect(find("stream")).toEqual({ method: "GET", path: STREAM_PATH, builder: "stream" });
+    expect(find("accountStream")).toEqual({
+      method: "GET",
+      path: ACCOUNT_STREAM_PATH,
+      builder: "accountStream",
+    });
   });
 });

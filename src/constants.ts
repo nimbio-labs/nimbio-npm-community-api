@@ -46,7 +46,9 @@ export const CAPABILITIES = Object.freeze([
 ] as const);
 
 /**
- * Everything an **account-scoped** key can do: `open`, and nothing else.
+ * Everything an **account-scoped** key can be granted: `open`, plus
+ * `directory_call_events` (`account.streamEvents()` /
+ * `account.directoryCalls()`) where that feature is enabled for the account.
  *
  * Account keys act on your own keys and latches (`client.account.*`); the
  * community surface is refused with `not_community_key` (403). Branch on this
@@ -57,14 +59,18 @@ export const CAPABILITIES = Object.freeze([
  * const scope = me.key.type; // "account" | "community"
  * ```
  */
-export const ACCOUNT_KEY_CAPABILITIES = Object.freeze(["open"] as const);
+export const ACCOUNT_KEY_CAPABILITIES = Object.freeze([
+  "open",
+  "directory_call_events",
+] as const);
 
 /**
- * A key capability. Any string is accepted — the known names autocomplete, but
+ * A key capability (community or account). Any string is accepted — the known names autocomplete, but
  * a capability this client predates is still a valid value.
  */
 export type Capability =
   | (typeof CAPABILITIES)[number]
+  | (typeof ACCOUNT_KEY_CAPABILITIES)[number]
   // Widens to `string` while keeping the literals in autocomplete.
   | (string & Record<never, never>);
 
@@ -100,6 +106,33 @@ export const STREAM_EVENT_TYPES = Object.freeze([
  */
 export type StreamEventType =
   | (typeof STREAM_EVENT_TYPES)[number]
+  | (string & Record<never, never>);
+
+/**
+ * Every event type the **account** stream (`account.streamEvents({ events })`)
+ * can deliver. A separate catalog from {@link STREAM_EVENT_TYPES}: these go to
+ * the account a call rang, not to a community, and no webhook carries them.
+ * Open like the others — a newer server may add types.
+ */
+export const ACCOUNT_EVENT_TYPES = Object.freeze([
+  "directory_call.ringing",
+  "directory_call.ended",
+] as const);
+
+/**
+ * The known `outcome` values of a directory call (`directory_call.ended`,
+ * `account.directoryCalls()`). Open: a newer server may add one, so treat an
+ * unrecognized value as "ended, outcome unknown" rather than an error.
+ */
+export const DIRECTORY_CALL_OUTCOMES = Object.freeze([
+  "opened",
+  "answered",
+  "missed",
+] as const);
+
+/** An account stream event type. Any string is accepted. */
+export type AccountEventType =
+  | (typeof ACCOUNT_EVENT_TYPES)[number]
   | (string & Record<never, never>);
 
 /**

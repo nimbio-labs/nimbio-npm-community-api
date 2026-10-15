@@ -506,6 +506,21 @@ export const endpoints = {
     };
   },
 
+  accountDirectoryCalls(
+    limit?: number | null,
+    before?: string | null,
+  ): EndpointSpec<models.DirectoryCallPage> {
+    const params: Record<string, string> = {};
+    if (limit != null) params.limit = String(limit);
+    if (before != null) params.before = before;
+    return {
+      method: "GET",
+      path: "/v1/account/directory-calls",
+      params: Object.keys(params).length ? params : undefined,
+      parse: models.parseDirectoryCallPage,
+    };
+  },
+
   info(): EndpointSpec<models.CommunityInfo> {
     return {
       method: "GET",

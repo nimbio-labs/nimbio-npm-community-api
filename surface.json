@@ -10,6 +10,16 @@
     },
     {
       "method": "GET",
+      "path": "/v1/account/directory-calls",
+      "builder": "accountDirectoryCalls"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/account/events/stream",
+      "builder": "accountStream"
+    },
+    {
+      "method": "GET",
       "path": "/v1/account/keys",
       "builder": "accountKeys"
     },

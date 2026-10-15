@@ -56,6 +56,8 @@ export {
   CAPABILITIES,
   ACCOUNT_KEY_CAPABILITIES,
   STREAM_EVENT_TYPES,
+  ACCOUNT_EVENT_TYPES,
+  DIRECTORY_CALL_OUTCOMES,
   GUEST_LINK_TYPES,
   GUEST_LINK_STATES,
   GEOFENCE_MODES,
@@ -67,6 +69,7 @@ export {
 export type {
   Capability,
   StreamEventType,
+  AccountEventType,
   GuestLinkType,
   GuestLinkState,
   GeofenceMode,
@@ -132,6 +135,22 @@ export type {
   StreamEvent,
   StreamReset,
   StreamMessage,
+  AccountEvent,
+  AccountStreamEvent,
+  AccountStreamMessage,
+  DirectoryCallRingingEvent,
+  DirectoryCallEndedEvent,
+  DirectoryCallRinging,
+  DirectoryCallEnded,
+  DirectoryCall,
+  DirectoryCallPage,
+  DirectoryCallBase,
+  DirectoryCallEndFields,
+  DirectoryCallCaller,
+  DirectoryCallCalled,
+  DirectoryCallOutcome,
+  DirectoryCallEndedBy,
+  DirectoryCallState,
   CommunityFeatures,
   CommunityCounts,
   CommunityLatch,
@@ -218,6 +237,8 @@ export type {
   KeyUsageEntry,
   KeyUsageReport,
 } from "./models.js";
+// Typed parse of an account event envelope (e.g. one stored from the stream).
+export { parseAccountEvent } from "./models.js";
 
 // Webhook delivery verification (HMAC)
 export {
