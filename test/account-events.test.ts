@@ -30,7 +30,7 @@ const RINGING = {
   answer_window_ends_at: "2026-10-15T12:09:00+00:00",
   community: { id: 123, name: "Oak Grove" },
   latch: { id: "L1", name: "Front Gate" },
-  called: { type: "home", home_id: 7, home_name: "Unit 4" },
+  called: { type: "home", home_id: "6f1c2b9e-0d4a-4c8e-9b1a-3e5d7f9a1c2b", home_name: "Unit 4" },
   arrived_via: "nfc",
   caller: null,
 };
@@ -89,7 +89,7 @@ describe("parseAccountEvent", () => {
       answerWindowEndsAt: "2026-10-15T12:09:00+00:00",
       community: { id: 123, name: "Oak Grove" },
       latch: { id: "L1", name: "Front Gate" },
-      called: { type: "home", homeId: 7, homeName: "Unit 4" },
+      called: { type: "home", homeId: "6f1c2b9e-0d4a-4c8e-9b1a-3e5d7f9a1c2b", homeName: "Unit 4" },
       arrivedVia: "nfc",
       caller: null,
     });
@@ -238,7 +238,7 @@ describe("account.directoryCalls", () => {
     expect(page.calls[1]).toMatchObject({
       outcome: "missed",
       caller: { signedIn: true, firstName: null, lastName: "Ruiz" },
-      called: { type: "home", homeId: 7 },
+      called: { type: "home", homeId: "6f1c2b9e-0d4a-4c8e-9b1a-3e5d7f9a1c2b" },
     });
   });
 

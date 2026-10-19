@@ -819,7 +819,7 @@ export interface DirectoryCallCalled {
   /** `"member"` | `"home"`. */
   type: string | null;
   /** Set for a home call. */
-  homeId: number | null;
+  homeId: string | null;
   homeName: string | null;
 }
 
@@ -934,7 +934,7 @@ function parseDirectoryCallBase(d: RawPayload): DirectoryCallBase {
     latch: latch && { id: str(latch.id), name: str(latch.name) },
     called: {
       type: str(called.type),
-      homeId: num(called.home_id),
+      homeId: str(called.home_id),
       homeName: str(called.home_name),
     },
     arrivedVia: str(d.arrived_via),
