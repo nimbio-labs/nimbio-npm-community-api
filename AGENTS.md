@@ -345,7 +345,7 @@ typo-avoidance.
   excluded gate is a 422, so read it before creating. It is deliberately
   **read-only** — the setter narrows what a link type may ever cover, a safety
   control that stays in the CM portal. Not a gap.
-- **An API key can mint an `event` link even when the community has event keys
+- **An API key can mint an `event` link even when the community has event links
   switched off.** That switch aims at *members* and has never applied to a
   manager acting on the management surface, so a settings flip cannot break
   links a manager handed out for tonight — and an API key inherits the carve-out.

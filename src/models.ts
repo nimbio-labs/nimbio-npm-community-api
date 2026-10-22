@@ -2166,9 +2166,9 @@ export function parseCommunitySettingsValues(
  *
  * - `allowHoldOpens` false — every `/v1/community/hold-opens` read and write 403s.
  * - `isOpenLogHistoryEnabled` false — `accessLog()` and `gateStatusLog()` 403.
- * - `eventKeysEnabled` is the **resolved** answer for event keys: the settable
+ * - `eventKeysEnabled` is the **resolved** answer for event links: the settable
  *   `eventKeysOverride` (`inherit`/`allow`/`deny`) combined with the property
- *   type's default. Read this, not the override, to know whether event keys work.
+ *   type's default. Read this, not the override, to know whether event links work.
  * - `accessCodeMode` (`per_member` / `single_entry`) is the one read-only value
  *   an API key *can* change — but only through `community.setAccessCodeMode()`,
  *   because switching it deletes every access code in the community and needs

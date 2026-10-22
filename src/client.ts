@@ -1046,7 +1046,7 @@ export class Community {
    * `allowHoldOpens` false 403s every hold-open path,
    * `isOpenLogHistoryEnabled` false 403s {@link accessLog} and
    * {@link gateStatusLog}, and `readOnly.eventKeysEnabled` is the *resolved*
-   * answer for event keys — the settable `eventKeysOverride`
+   * answer for event links — the settable `eventKeysOverride`
    * (`inherit`/`allow`/`deny`) combined with the property type's default.
    *
    * Unlike {@link info}, this read **does** consume the monthly quota: it is
@@ -1084,7 +1084,7 @@ export class Community {
    *
    * **These settings change what the rest of the API does**: turning
    * `allowDirectoryViewing` off makes the directory disappear for members and
-   * guests, and `eventKeysOverride: "deny"` stops event keys community-wide
+   * guests, and `eventKeysOverride: "deny"` stops event links community-wide
    * whatever the property type allows. Test keys validate the whole patch and
    * return `result: "simulated"` with the community's *unchanged* settings.
    */

@@ -546,7 +546,7 @@ expired ones included, because a write replaces the whole schedule.
 those flags, and without this read the only way to learn a feature is off is to
 call it and take a 403: `allowHoldOpens` false 403s every hold-open path,
 `isOpenLogHistoryEnabled` false 403s `accessLog()` and `gateStatusLog()`, and
-`readOnly.eventKeysEnabled` is the *resolved* answer for event keys — the
+`readOnly.eventKeysEnabled` is the *resolved* answer for event links — the
 settable `eventKeysOverride` (`inherit`/`allow`/`deny`) combined with the
 property type's default. Unlike `info()`, this read **does** consume the monthly
 quota: it is setup-time configuration, not something to poll.
@@ -672,7 +672,7 @@ safety control — so exposing it to API callers was deliberately deferred, not
 forgotten.
 
 One deliberate widening: **an API key can mint an `event` link even when the
-community has event keys switched off.** That switch aims at *members*, and has
+community has event links switched off.** That switch aims at *members*, and has
 never applied to a manager acting on the management surface, so a settings flip
 cannot break links a manager handed out for tonight; an API key inherits the
 carve-out. If your integration should honour the community setting, read
